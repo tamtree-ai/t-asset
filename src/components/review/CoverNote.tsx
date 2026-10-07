@@ -4,6 +4,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { linkify } from "@/lib/studio/comment-filter";
 
+import { IconChevron } from "./icons";
+
 const KEY = "studio-review-cover-seen";
 
 const readSeen = (shareKey: string): boolean => {
@@ -43,17 +45,17 @@ export function CoverNote({ shareKey, studioName, message, notes }: { shareKey: 
 
   if (!message.trim() && notes.length === 0) return null;
   return (
-    <section aria-label={`A message from ${studioName}`} className="border-b border-room-line bg-room-surface">
-      <button type="button" aria-expanded={open} onClick={() => setToggled(!open)} className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-[13px] font-medium hover:bg-room-raised">
+    <section aria-label={`A message from ${studioName}`} className="overflow-hidden rounded-2xl border border-room-line">
+      <button type="button" aria-expanded={open} onClick={() => setToggled(!open)} className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-room-raised">
         <span>A message from {studioName}</span>
-        <span aria-hidden className="text-room-muted">
-          {open ? "Hide" : "Show"}
+        <span className="text-room-muted">
+          <IconChevron open={open} />
         </span>
       </button>
       {open && (
-        <div className="grid gap-4 px-4 pb-4 md:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+        <div className="scroll-thin flex max-h-[34dvh] flex-col gap-3 overflow-y-auto px-3.5 pb-3.5">
           {message.trim() && (
-            <div className="flex flex-col gap-2 text-[14.5px] leading-relaxed text-room-fg-2">
+            <div className="flex flex-col gap-2 text-[13.5px] leading-relaxed text-room-fg-2">
               {message
                 .split(/\n{2,}/)
                 .filter(Boolean)
@@ -73,7 +75,7 @@ export function CoverNote({ shareKey, studioName, message, notes }: { shareKey: 
             </div>
           )}
           {notes.length > 0 && (
-            <ul className="flex flex-col gap-1.5 rounded-xl bg-room-raised p-3.5 text-[13.5px] text-room-fg-2">
+            <ul className="flex flex-col gap-1.5 rounded-xl bg-room-raised px-3 py-2.5 text-[12.5px] text-room-fg-2">
               {notes.map((n, i) => (
                 <li key={i} className="flex gap-2">
                   <span aria-hidden className="mt-2 size-1 shrink-0 rounded-full bg-room-muted" />

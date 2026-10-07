@@ -9,7 +9,7 @@ import type { RoomVersionView } from "./types";
 
 type Decide = (decision: "approved" | "changes_requested", input: { signedName?: string; confirm?: boolean; note?: string }) => Promise<string | null>;
 
-/** The sticky decision bar and its two dialogs (plan §4.3). */
+/** The decision footer of the review panel, and its two dialogs. */
 export function DecisionBar({
   version,
   openCount,
@@ -53,10 +53,10 @@ export function DecisionBar({
   const s = version.status;
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-room-line bg-room-surface px-4 py-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-[13px]">
-          <span className="inline-flex items-center gap-2">
-            <span aria-hidden className={`size-2 rounded-full ${s === "approved" ? "bg-[#1a7f4b]" : s === "changes_requested" ? "bg-[#b25e09]" : "bg-room-muted"}`} />
+      <div className="flex flex-col gap-3 border-t border-room-line bg-room-surface px-4 pb-4 pt-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-room-raised px-2.5 py-1">
+            <span aria-hidden className={`size-1.5 rounded-full ${s === "approved" ? "bg-[#12b76a]" : s === "changes_requested" ? "bg-[#f79009]" : "bg-room-muted"}`} />
             <span className="font-medium">{STATUS_WORD[s]}</span>
           </span>
           {version.signoff && (
@@ -70,23 +70,23 @@ export function DecisionBar({
           {downloadNote && !downloadHref && <span className="text-room-muted">{downloadNote}</span>}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2">
           {downloadHref && (
-            <a href={downloadHref} download className="inline-flex h-10 items-center rounded-lg border border-room-line px-4 text-[13.5px] font-medium hover:bg-room-raised">
+            <a href={downloadHref} download className="inline-flex h-10 items-center justify-center rounded-xl border border-room-line text-[13px] font-medium transition-colors hover:bg-room-raised">
               Download final file
             </a>
           )}
           {version.latest ? (
-            <>
-              <button type="button" onClick={() => setDialog("changes")} className="h-10 rounded-lg border border-room-line px-4 text-[13.5px] font-medium hover:bg-room-raised">
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setDialog("changes")} className="h-10 rounded-xl border border-room-line text-[13px] font-medium transition-colors hover:bg-room-raised">
                 Request changes
               </button>
-              <button type="button" onClick={() => setDialog("approve")} disabled={s === "approved"} className="h-10 rounded-lg bg-brand px-5 text-[13.5px] font-semibold text-brand-ink hover:bg-brand-hover disabled:opacity-50">
+              <button type="button" onClick={() => setDialog("approve")} disabled={s === "approved"} className="h-10 rounded-xl bg-brand text-[13px] font-semibold text-brand-ink transition-colors hover:bg-brand-hover disabled:opacity-50">
                 {s === "approved" ? "Approved" : `Approve v${version.number}`}
               </button>
-            </>
+            </div>
           ) : (
-            <button type="button" onClick={onGoLatest} className="h-10 rounded-lg border border-room-line px-4 text-[13.5px] font-medium hover:bg-room-raised">
+            <button type="button" onClick={onGoLatest} className="h-10 rounded-xl border border-room-line text-[13px] font-medium transition-colors hover:bg-room-raised">
               This isn’t the latest version. Go to the latest
             </button>
           )}

@@ -43,7 +43,7 @@ export function Identify({ token, studioName, hasLogo }: { token: string; studio
   const [pending, start] = useTransition();
 
   return (
-    <main className="flex flex-1 items-center justify-center px-4 py-10">
+    <main className="stage flex flex-1 items-center justify-center px-4 py-10">
       <form
         className="flex w-full max-w-[400px] flex-col gap-5 rounded-2xl border border-room-line bg-room-surface p-7 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_40px_rgb(0_0_0/0.06)]"
         onSubmit={(e) => {
@@ -61,7 +61,7 @@ export function Identify({ token, studioName, hasLogo }: { token: string; studio
       >
         <BrandMark token={token} name={studioName} hasLogo={hasLogo} />
         <div className="flex flex-col gap-1.5">
-          <h1 className="font-display text-[30px] leading-[1.05]">Who’s reviewing?</h1>
+          <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">Who’s reviewing?</h1>
           <p className="text-[14px] text-room-muted">Your name goes on your comments. Your email gets you a note when {studioName} replies, and goes on your approval.</p>
         </div>
         <label className="flex flex-col gap-1.5 text-[13px] font-medium text-room-fg-2">

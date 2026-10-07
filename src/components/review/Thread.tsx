@@ -10,7 +10,7 @@ import type { CommentView } from "./types";
 
 function Body({ text }: { text: string }) {
   return (
-    <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-room-fg">
+    <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-room-fg">
       {linkify(text).map((p, i) =>
         "href" in p ? (
           <a key={i} href={p.href} target="_blank" rel="noopener noreferrer nofollow" className="text-brand-text underline underline-offset-2">
@@ -142,7 +142,7 @@ export function Thread({
       data-comment-id={thread.id}
       onMouseEnter={() => onHover(thread.id)}
       onMouseLeave={() => onHover(null)}
-      className={`flex flex-col gap-2.5 rounded-xl border p-3 transition-colors ${active ? "border-brand bg-brand-soft" : "border-room-line bg-room-surface"} ${thread.resolved ? "opacity-75" : ""}`}
+      className={`flex flex-col gap-2.5 rounded-2xl p-3 transition-colors ${active ? "bg-brand-soft ring-1 ring-brand/40" : "hover:bg-room-raised"} ${thread.resolved ? "opacity-60" : ""}`}
     >
       <div className="flex items-start gap-2.5">
         <button type="button" onClick={onActivate} aria-label={`Show comment ${thread.number} on the work`} className="num mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-bold text-brand-ink">

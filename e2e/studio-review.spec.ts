@@ -379,11 +379,13 @@ test("12. the page doesn't scroll sideways on a phone", async ({ browser, page }
   await phone.getByLabel("Your name").fill("Phone Tester");
   await phone.getByLabel("Your email").fill(`phone-${stamp}@example.com`);
   await phone.getByRole("button", { name: "Continue" }).click();
-  await expect(phone.getByText("A message from")).toBeVisible();
+  // On a phone the work fills the screen; the message and comments live in the panel sheet.
+  await expect(phone.getByRole("button", { name: /^Comments/ }).first()).toBeVisible();
   const overflow = await phone.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   // The rail is a sheet on a phone.
   await expect(phone.getByRole("complementary", { name: "Comments" })).toBeHidden();
   await phone.getByRole("button", { name: /^Comments/ }).first().click();
   await expect(phone.getByRole("complementary", { name: "Comments" })).toBeVisible();
+  await expect(phone.getByText("A message from")).toBeVisible();
 });

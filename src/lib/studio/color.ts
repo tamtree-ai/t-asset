@@ -59,10 +59,12 @@ export type RoomPalette = {
   fg: string;
   fg2: string;
   fgMuted: string;
+  /** Behind the work: a step away from the panel, so the picture is the brightest thing on screen. */
+  stage: string;
 };
 
-export const LIGHT: RoomPalette = { bg: "#f6f5f2", surface: "#ffffff", raised: "#faf9f7", line: "#e4e2dd", fg: "#18181b", fg2: "#3f3f46", fgMuted: "#6b6b73" };
-export const DARK: RoomPalette = { bg: "#0f0f12", surface: "#17171b", raised: "#1d1d22", line: "#2c2c33", fg: "#f4f4f5", fg2: "#d4d4d8", fgMuted: "#a1a1aa" };
+export const LIGHT: RoomPalette = { bg: "#f7f7f8", surface: "#ffffff", raised: "#f4f4f5", line: "#e6e6e9", fg: "#0b0b0d", fg2: "#3f3f46", fgMuted: "#6b6b74", stage: "#ececef" };
+export const DARK: RoomPalette = { bg: "#0a0a0b", surface: "#111113", raised: "#19191c", line: "#26262b", fg: "#fafafa", fg2: "#d4d4d8", fgMuted: "#a1a1aa", stage: "#060607" };
 
 /** The CSS variables for the review room, for one mode. */
 export function brandVars(accentHex: string, mode: "light" | "dark"): Record<string, string> {
@@ -77,6 +79,7 @@ export function brandVars(accentHex: string, mode: "light" | "dark"): Record<str
     "--room-fg": p.fg,
     "--room-fg-2": p.fg2,
     "--room-fg-muted": p.fgMuted,
+    "--room-stage": p.stage,
     "--brand-accent": accent,
     "--brand-accent-hover": hover,
     "--brand-accent-ink": inkOn(accent),

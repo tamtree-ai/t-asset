@@ -51,7 +51,9 @@ export function CommentRail({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div role="tablist" aria-label="Filter comments" className="flex gap-1 border-b border-room-line px-3 pt-2">
+      <div className="flex items-center justify-between gap-3 border-t border-room-line px-4 pb-2 pt-3">
+      <h2 className="text-[13px] font-semibold">Comments</h2>
+      <div role="tablist" aria-label="Filter comments" className="flex gap-0.5 rounded-xl bg-room-raised p-0.5">
         {tabs.map(([key, label, n]) => (
           <button
             key={key}
@@ -59,18 +61,19 @@ export function CommentRail({
             role="tab"
             aria-selected={filter === key}
             onClick={() => setFilter(key)}
-            className={`-mb-px border-b-2 px-2.5 py-2 text-[13px] ${filter === key ? "border-brand font-semibold text-room-fg" : "border-transparent text-room-muted hover:text-room-fg"}`}
+            className={`rounded-[10px] px-2.5 py-1 text-[12px] transition-colors ${filter === key ? "bg-room-surface font-semibold text-room-fg shadow-[0_1px_2px_rgb(0_0_0/0.08)]" : "text-room-muted hover:text-room-fg"}`}
           >
-            {label} <span className="num text-[12px]">{n}</span>
+            {label} <span className="num text-[11px] opacity-70">{n}</span>
           </button>
         ))}
       </div>
+      </div>
 
-      <div ref={list} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3" aria-live="polite">
+      <div ref={list} className="scroll-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-1" aria-live="polite">
         {loading && threads.length === 0 ? (
           <p className="px-1 py-6 text-center text-[13px] text-room-muted">Loading comments…</p>
         ) : shown.length === 0 ? (
-          <p className="px-2 py-8 text-center text-[13px] leading-relaxed text-room-muted">
+          <p className="px-6 py-10 text-center text-[13px] leading-relaxed text-room-muted">
             {threads.length === 0 ? "No comments yet. Press C to pin one to a spot, or write a general comment below." : filter === "open" ? "Nothing open. Everything here is resolved." : "Nothing resolved yet."}
           </p>
         ) : (
@@ -78,7 +81,7 @@ export function CommentRail({
         )}
       </div>
 
-      <div className="border-t border-room-line bg-room-surface p-3">{composer}</div>
+      <div className="bg-room-surface px-3 pb-3 pt-1">{composer}</div>
     </div>
   );
 }

@@ -64,6 +64,7 @@
   --color-room-fg: var(--room-fg);
   --color-room-fg-2: var(--room-fg-2);
   --color-room-muted: var(--room-fg-muted);
+  --color-room-stage: var(--room-stage);
   --color-brand: var(--brand-accent);
   --color-brand-hover: var(--brand-accent-hover);
   --color-brand-ink: var(--brand-accent-ink);
@@ -76,6 +77,31 @@
   color: var(--room-fg);
   font-family: var(--font-sans);
   min-height: 100dvh;
+}
+/* Floating controls over the work: frosted, hairline edge, soft lift. */
+.room .glass {
+  background: color-mix(in srgb, var(--room-surface) 76%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  border: 1px solid color-mix(in srgb, var(--room-line) 75%, transparent);
+  box-shadow:
+    0 1px 1px rgb(0 0 0 / 0.04),
+    0 12px 32px -12px rgb(0 0 0 / 0.28);
+}
+/* The stage: the room's backdrop with a faint dot grid, like a design canvas. */
+.room .stage {
+  background-color: var(--room-stage);
+  background-image: radial-gradient(color-mix(in srgb, var(--room-fg) 8%, transparent) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+.room .scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--room-fg) 18%, transparent) transparent;
+}
+/* In the room numbers stay tabular but sans: the mono face reads as a tool, not a review. */
+.room .num {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 .room :focus-visible {
   outline: 2px solid var(--brand-accent);

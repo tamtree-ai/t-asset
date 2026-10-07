@@ -8,7 +8,10 @@ import { zoomAbout } from "@/lib/studio/pins";
 
 import { PinLayer } from "./PinLayer";
 import type { CommentView, StageHandle } from "./types";
-import { useFit } from "./useFit";
+import { type Inset, useFit } from "./useFit";
+
+/** Room for the floating pills above and the comment tool below. */
+const inset = (w: number): Inset => (w < 640 ? { t: 108, r: 12, b: 76, l: 12 } : { t: 76, r: 40, b: 88, l: 40 });
 
 const MAX_ZOOM = 8;
 
@@ -41,7 +44,7 @@ export function ImageStage({
   handle: Ref<StageHandle>;
 }) {
   const frame = useRef<HTMLDivElement>(null);
-  const fit = useFit(frame, width / height);
+  const fit = useFit(frame, width / height, inset);
   const [view, setView] = useState({ scale: 1, x: 0, y: 0 });
   const [animate, setAnimate] = useState(false);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -152,26 +155,26 @@ export function ImageStage({
           style={{
             width: fit.w,
             height: fit.h,
-            marginLeft: -fit.w / 2,
-            marginTop: -fit.h / 2,
+            marginLeft: -fit.w / 2 + fit.dx,
+            marginTop: -fit.h / 2 + fit.dy,
             transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
             transition: animate ? "transform 220ms var(--ease-out)" : "none",
             ["--zoom" as string]: view.scale,
           }}
         >
-          <img src={src} alt={alt} draggable={false} className="size-full select-none shadow-[0_2px_24px_rgb(0_0_0/0.12)]" />
+          <img src={src} alt={alt} draggable={false} className="size-full select-none rounded-[3px] shadow-[0_1px_2px_rgb(0_0_0/0.06),0_24px_64px_-24px_rgb(0_0_0/0.35)]" />
           <PinLayer threads={threads} activeId={activeId} onActivate={onActivate} onHover={onHover} draft={draft} capturing={capturing} time={null} onPlace={onPlace} />
         </div>
       )}
 
-      <div className="absolute bottom-3 left-3 flex items-center gap-1 rounded-lg border border-room-line bg-room-surface/95 p-1 text-[12px] shadow-sm">
-        <button type="button" aria-label="Zoom out" className="size-7 rounded-md hover:bg-room-raised" onClick={() => zoomBy(1 / 1.5)}>
+      <div className="glass absolute bottom-5 right-4 z-10 hidden items-center gap-0.5 rounded-2xl p-1 text-[12px] sm:flex">
+        <button type="button" aria-label="Zoom out" className="size-8 rounded-xl text-room-fg-2 transition-colors hover:bg-room-raised hover:text-room-fg" onClick={() => zoomBy(1 / 1.5)}>
           −
         </button>
-        <button type="button" aria-label="Fit to screen" className="num h-7 min-w-12 rounded-md px-1.5 hover:bg-room-raised" onClick={() => (setAnimate(true), setView({ scale: 1, x: 0, y: 0 }))}>
+        <button type="button" aria-label="Fit to screen" className="num h-8 min-w-12 rounded-xl px-1.5 text-room-fg-2 transition-colors hover:bg-room-raised hover:text-room-fg" onClick={() => (setAnimate(true), setView({ scale: 1, x: 0, y: 0 }))}>
           {Math.round(view.scale * 100)}%
         </button>
-        <button type="button" aria-label="Zoom in" className="size-7 rounded-md hover:bg-room-raised" onClick={() => zoomBy(1.5)}>
+        <button type="button" aria-label="Zoom in" className="size-8 rounded-xl text-room-fg-2 transition-colors hover:bg-room-raised hover:text-room-fg" onClick={() => zoomBy(1.5)}>
           +
         </button>
       </div>

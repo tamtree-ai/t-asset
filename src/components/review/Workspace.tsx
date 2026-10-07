@@ -13,6 +13,7 @@ import { CoverNote } from "./CoverNote";
 import { DecisionBar } from "./DecisionBar";
 import { ImageStage } from "./ImageStage";
 import { ShortcutHelp } from "./ShortcutHelp";
+import { IconChevron, IconClose, IconComment, IconCompare, IconDownload, IconExpand, IconKeyboard, IconPanel, IconShrink } from "./icons";
 import { fileUrl, type CommentView, type Placement, type ReviewApi, type RoomAssetView, type StageHandle, type VersionStatus } from "./types";
 import { VideoStage } from "./VideoStage";
 
@@ -51,6 +52,8 @@ export function Workspace(p: Props) {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
   const [help, setHelp] = useState(false);
+  const [panel, setPanel] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const stage = useRef<StageHandle>(null);
   const composerBox = useRef<HTMLTextAreaElement>(null);
@@ -65,6 +68,16 @@ export function Workspace(p: Props) {
   const fps = useMemo(() => (fpsNum && fpsDen ? { num: fpsNum, den: fpsDen } : null), [fpsNum, fpsDen]);
   const c = counts(threads);
   const highlighted = hoverId ?? activeId;
+
+  useEffect(() => {
+    const on = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  };
 
   const flash = (m: string) => {
     setToast(m);
@@ -292,203 +305,242 @@ export function Workspace(p: Props) {
   const compareHref = token && (variation.versions.length > 1 || (asset.kind === "image" && asset.variations.length > 1)) ? `/review/${token}/compare?asset=${asset.id}&b=${version.id}` : null;
   const disabledReason = !p.commentsOpen ? "Comments are paused on this review." : !ready ? "Comments open once this file has finished processing." : null;
 
+  const showPanel = panel || sheet;
+  const pill = "glass flex items-center gap-1 rounded-2xl p-1";
+  // No display class here, so a caller can add `inline-flex` or `hidden sm:inline-flex` without a clash.
+  const iconBtn = "size-8 items-center justify-center rounded-xl text-room-fg-2 transition-colors hover:bg-room-raised hover:text-room-fg";
+
   return (
-    <div className={`flex flex-col ${p.embedded ? "h-[clamp(540px,76dvh,800px)] overflow-hidden rounded-xl border border-room-line" : "h-dvh"}`}>
-      {!p.embedded && (
-        <header className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-room-line bg-room-surface px-4 py-2.5">
-          <BrandMark token={token ?? ""} name={p.brand.studioName} hasLogo={p.brand.hasLogo} />
-          <div className="flex min-w-0 items-baseline gap-2">
-            <h1 className="truncate font-display text-[22px] leading-none">{p.title}</h1>
-            {p.clientName && <span className="hidden truncate text-[12.5px] text-room-muted sm:inline">for {p.clientName}</span>}
+    <div className={`flex overflow-hidden bg-room-surface ${p.embedded ? "relative h-[clamp(560px,78dvh,860px)] rounded-2xl border border-room-line" : "fixed inset-0"}`}>
+      {/* The work, edge to edge. Every control floats over it. */}
+      <main className="stage relative flex min-w-0 flex-1 flex-col">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-2 p-3 sm:flex-nowrap sm:p-4">
+          <div className="pointer-events-auto flex min-w-0 basis-full flex-wrap items-center gap-2 sm:basis-auto">
+            {!p.hideSwitchers && (
+              <div className={`${pill} max-w-full`}>
+                {assets.length > 1 ? (
+                  <label className="relative flex items-center">
+                    <span className="sr-only">Asset</span>
+                    <select aria-label="Asset" value={asset.id} onChange={(e) => goAsset(e.target.value)} className="h-8 max-w-[200px] appearance-none truncate rounded-xl bg-transparent pl-3 pr-7 text-[13px] font-semibold text-room-fg outline-none hover:bg-room-raised">
+                      {assets.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.title}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-2 text-room-muted">
+                      <IconChevron />
+                    </span>
+                  </label>
+                ) : (
+                  <span className="truncate px-3 text-[13px] font-semibold">{asset.title}</span>
+                )}
+                {asset.variations.length > 1 && (
+                  <>
+                    <span aria-hidden className="mx-0.5 h-4 w-px bg-room-line" />
+                    <div role="tablist" aria-label="Options" className="flex max-w-full gap-0.5 overflow-x-auto">
+                      {asset.variations.map((v) => (
+                        <button key={v.id} type="button" role="tab" aria-selected={v.id === variation.id} onClick={() => goVariation(v.id)} className={`h-8 shrink-0 rounded-xl px-3 text-[12.5px] transition-colors ${v.id === variation.id ? "bg-room-fg font-semibold text-room-surface" : "text-room-fg-2 hover:bg-room-raised hover:text-room-fg"}`}>
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
-          <span className="flex-1" />
-          {p.rounds && (
-            <span className={`num text-[12.5px] ${p.rounds.over ? "font-semibold text-[#b25e09]" : "text-room-muted"}`} title={p.rounds.note ?? undefined}>
-              {p.rounds.label}
-              {p.rounds.note ? ` · ${p.rounds.note}` : ""}
-            </span>
-          )}
-          {download && (
-            <a href={download} download className="inline-flex h-9 items-center rounded-lg border border-room-line px-3 text-[13px] font-medium hover:bg-room-raised">
-              Download
-            </a>
-          )}
-          <button type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts ( ? )" onClick={() => setHelp(true)} className="size-9 rounded-lg border border-room-line text-[13px] hover:bg-room-raised">
-            ?
-          </button>
-        </header>
-      )}
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-room-line bg-room-surface px-4 py-2">
-        {!p.hideSwitchers && (
-          <>
-        {assets.length > 1 && (
-          <label className="flex items-center gap-2 text-[12.5px] text-room-muted">
-            <span className="sr-only sm:not-sr-only">Asset</span>
-            <select aria-label="Asset" value={asset.id} onChange={(e) => goAsset(e.target.value)} className="h-8 max-w-[220px] rounded-lg border border-room-line bg-room-surface px-2 text-[13px] text-room-fg">
-              {assets.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.title}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {assets.length === 1 && <span className="text-[13.5px] font-medium">{asset.title}</span>}
-        {asset.variations.length > 1 && (
-          <div role="tablist" aria-label="Options" className="flex max-w-full gap-1 overflow-x-auto">
-            {asset.variations.map((v) => (
-              <button key={v.id} type="button" role="tab" aria-selected={v.id === variation.id} onClick={() => goVariation(v.id)} className={`h-8 shrink-0 rounded-lg px-3 text-[13px] ${v.id === variation.id ? "bg-brand text-brand-ink font-semibold" : "border border-room-line text-room-fg-2 hover:bg-room-raised"}`}>
-                {v.label}
+          <div className="pointer-events-auto ml-auto flex shrink-0 items-center gap-2">
+            {!p.hideSwitchers && (
+              <div className={pill}>
+                <label className="relative flex items-center">
+                  <span className="sr-only">Version</span>
+                  <select aria-label="Version" value={version.id} onChange={(e) => goVersion(e.target.value)} className="num h-8 appearance-none rounded-xl bg-transparent pl-3 pr-7 text-[12.5px] font-medium text-room-fg outline-none hover:bg-room-raised">
+                    {[...variation.versions].reverse().map((v) => (
+                      <option key={v.id} value={v.id}>
+                        v{v.number}
+                        {v.id === latestId ? " · latest" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-2 text-room-muted">
+                    <IconChevron />
+                  </span>
+                </label>
+                {compareHref && (
+                  <Link href={compareHref} aria-label="Compare versions" title="Compare versions" className={`${iconBtn} inline-flex`}>
+                    <IconCompare />
+                  </Link>
+                )}
+              </div>
+            )}
+            <div className={pill}>
+              {download && !p.embedded && (
+                <a href={download} download aria-label="Download" title="Download" className={`${iconBtn} inline-flex`}>
+                  <IconDownload />
+                </a>
+              )}
+              <button type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts ( ? )" onClick={() => setHelp(true)} className={`${iconBtn} hidden sm:inline-flex`}>
+                <IconKeyboard />
               </button>
-            ))}
+              {!p.embedded && (
+                <button type="button" aria-label={fullscreen ? "Exit full screen" : "Full screen"} title={fullscreen ? "Exit full screen" : "Full screen"} onClick={toggleFullscreen} className={`${iconBtn} hidden sm:inline-flex`}>
+                  {fullscreen ? <IconShrink /> : <IconExpand />}
+                </button>
+              )}
+              <button type="button" aria-label={panel ? "Hide the review panel" : "Show the review panel"} title={panel ? "Hide the review panel" : "Show the review panel"} aria-pressed={panel} onClick={() => setPanel((x) => !x)} className={`${iconBtn} hidden md:inline-flex ${panel ? "" : "text-room-fg"}`}>
+                <IconPanel />
+                {!panel && c.open > 0 && <span className="num ml-1 text-[11px] font-semibold">{c.open}</span>}
+              </button>
+              <button type="button" onClick={() => setSheet(true)} className="inline-flex h-8 items-center gap-1.5 rounded-xl px-2.5 text-[12.5px] font-medium md:hidden">
+                Comments <span className="num">{c.all}</span>
+              </button>
+            </div>
           </div>
-        )}
-        <label className="flex items-center gap-2 text-[12.5px] text-room-muted">
-          <span className="sr-only sm:not-sr-only">Version</span>
-          <select aria-label="Version" value={version.id} onChange={(e) => goVersion(e.target.value)} className="num h-8 rounded-lg border border-room-line bg-room-surface px-2 text-[13px] text-room-fg">
-            {[...variation.versions].reverse().map((v) => (
-              <option key={v.id} value={v.id}>
-                v{v.number}
-                {v.id === latestId ? " (latest)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        {compareHref && (
-          <Link href={compareHref} className="text-[13px] font-medium text-brand-text hover:underline">
-            Compare versions
-          </Link>
-        )}
-          </>
-        )}
-        <span className="flex-1" />
-        {p.embedded && (
-          <button type="button" aria-label="Keyboard shortcuts" onClick={() => setHelp(true)} className="size-8 rounded-lg border border-room-line text-[13px] hover:bg-room-raised">
-            ?
-          </button>
-        )}
-      </div>
-
-      {p.cover && <CoverNote shareKey={p.cover.key} studioName={p.brand.studioName} message={p.cover.message} notes={p.cover.notes} />}
-      {version.changeNote.trim() && (
-        <div className="border-b border-room-line bg-brand-soft px-4 py-2 text-[13.5px] text-room-fg-2">
-          <span className="font-semibold text-room-fg">What changed in v{version.number}:</span> {version.changeNote}
         </div>
-      )}
 
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-room-bg">
-          <div className="flex flex-wrap items-center gap-3 px-4 py-2 text-[12.5px]">
+        {/* The comment tool: one obvious action, floating where the eye already is. */}
+        <div className={`pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3 ${isVideo ? "bottom-[118px]" : "bottom-5"}`}>
+          <div className="pointer-events-auto glass flex items-center gap-2 rounded-full p-1 pr-1.5">
             <button
               type="button"
               onClick={startComment}
               disabled={!!disabledReason}
               aria-pressed={mode === "comment"}
-              className={`inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-semibold ${mode === "comment" ? "bg-brand text-brand-ink" : "border border-room-line bg-room-surface hover:bg-room-raised"} disabled:opacity-50`}
+              title={disabledReason ?? "Comment on a spot ( C )"}
+              className={`inline-flex h-9 items-center gap-2 rounded-full px-4 text-[13px] font-semibold transition-colors disabled:opacity-40 ${mode === "comment" ? "bg-brand text-brand-ink" : "bg-room-fg text-room-surface hover:opacity-90"}`}
             >
+              <IconComment />
               {mode === "comment" ? "Click the work to place a pin" : "Comment"}
-              <kbd className="num rounded border border-current/30 px-1 text-[10.5px] opacity-70">C</kbd>
+              <kbd className="num rounded-md bg-current/15 px-1.5 text-[10.5px] font-medium opacity-70">C</kbd>
             </button>
-            {mode === "comment" && <span className="text-room-muted">Click to drop a pin, drag to draw a box. Esc cancels.</span>}
-            <span className="flex-1" />
-            <button type="button" onClick={() => setSheet(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-room-line bg-room-surface px-3 text-[13px] md:hidden">
-              Comments <span className="num">{c.all}</span>
-            </button>
+            {mode === "comment" && <span className="hidden pr-2 text-[12px] text-room-fg-2 sm:inline">Click for a pin, drag for a box · Esc cancels</span>}
           </div>
-
-          {!ready ? (
-            <div className="flex flex-1 items-center justify-center px-6 text-center text-[14px] text-room-muted">
-              {version.file.processing === "failed" ? "This version couldn't be prepared. Please tell the studio." : "This version is still being prepared. It will appear here in a moment."}
-            </div>
-          ) : isVideo ? (
-            <VideoStage
-              key={version.id}
-              src={src}
-              poster={version.marked ? undefined : fileUrl(audience, token, version.file.id, "poster")}
-              width={version.file.width ?? 1920}
-              height={version.file.height ?? 1080}
-              fps={fps}
-              threads={threads}
-              activeId={highlighted}
-              onActivate={activate}
-              onHover={setHoverId}
-              draft={draft}
-              capturing={mode === "comment"}
-              onPlace={place}
-              handle={stage}
-            />
-          ) : (
-            <ImageStage
-              key={version.id}
-              src={src}
-              alt={`${asset.title}, ${variation.label}, version ${version.number}`}
-              width={version.file.width ?? 1600}
-              height={version.file.height ?? 1200}
-              threads={threads}
-              activeId={highlighted}
-              onActivate={activate}
-              onHover={setHoverId}
-              draft={draft}
-              capturing={mode === "comment"}
-              onPlace={place}
-              handle={stage}
-            />
-          )}
         </div>
 
-        {/* On a phone the rail is a bottom sheet; from md up it is the 360px column. */}
-        <aside
-          aria-label="Comments"
-          className={`${sheet ? "fixed inset-x-0 bottom-0 z-30 flex h-[72dvh] rounded-t-2xl shadow-[0_-12px_40px_rgb(0_0_0/0.2)]" : "hidden"} min-h-0 flex-col border-t border-room-line bg-room-surface md:static md:z-auto md:flex md:h-auto md:w-[360px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none`}
-        >
-          <div className="flex items-center justify-between border-b border-room-line px-4 py-2.5 md:hidden">
-            <span className="text-[14px] font-semibold">Comments</span>
-            <button type="button" onClick={() => setSheet(false)} className="h-8 rounded-lg border border-room-line px-3 text-[13px]">
-              Close
-            </button>
+        {!ready ? (
+          <div className="flex flex-1 items-center justify-center px-6 text-center">
+            <div className="glass flex max-w-sm flex-col items-center gap-2 rounded-2xl px-6 py-5">
+              <span aria-hidden className={`size-2 rounded-full ${version.file.processing === "failed" ? "bg-[#d92d20]" : "animate-pulse bg-brand"}`} />
+              <p className="text-[13.5px] text-room-fg-2">{version.file.processing === "failed" ? "This version couldn't be prepared. Please tell the studio." : "This version is still being prepared. It will appear here in a moment."}</p>
+            </div>
           </div>
-          <CommentRail
+        ) : isVideo ? (
+          <VideoStage
+            key={version.id}
+            src={src}
+            poster={version.marked ? undefined : fileUrl(audience, token, version.file.id, "poster")}
+            width={version.file.width ?? 1920}
+            height={version.file.height ?? 1080}
+            fps={fps}
             threads={threads}
             activeId={highlighted}
-            fps={fps}
-            commentsOpen={p.commentsOpen}
             onActivate={activate}
             onHover={setHoverId}
-            handlers={handlers}
-            loading={loading}
-            composer={
-              <Composer
-                draft={draft}
-                fps={fps}
-                isVideo={isVideo}
-                audience={audience}
-                disabled={disabledReason}
-                textareaRef={composerBox}
-                onTyping={() => {
-                  if (!isVideo) return;
-                  stage.current?.pause();
-                  const t = stage.current?.time() ?? 0;
-                  setDraft({ v: 1, shape: "time", x: 0, y: 0, t, frame: fps ? Math.floor((t * fps.num) / fps.den + 1e-6) : undefined } as Annotation);
-                }}
-                onClearDraft={() => setDraft(null)}
-                onSetOut={setOut}
-                onSubmit={submit}
-              />
-            }
+            draft={draft}
+            capturing={mode === "comment"}
+            onPlace={place}
+            handle={stage}
           />
-        </aside>
-      </div>
+        ) : (
+          <ImageStage
+            key={version.id}
+            src={src}
+            alt={`${asset.title}, ${variation.label}, version ${version.number}`}
+            width={version.file.width ?? 1600}
+            height={version.file.height ?? 1200}
+            threads={threads}
+            activeId={highlighted}
+            onActivate={activate}
+            onHover={setHoverId}
+            draft={draft}
+            capturing={mode === "comment"}
+            onPlace={place}
+            handle={stage}
+          />
+        )}
 
-      {audience === "client" && (
-        <DecisionBar version={version} openCount={c.open} assetTitle={asset.title} onDecide={decide} onGoLatest={() => goVersion(latestId)} downloadHref={download} downloadNote={downloadNote} />
-      )}
+        {toast && (
+          <div role="status" className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-full bg-room-fg px-4 py-2 text-[13px] font-medium text-room-surface shadow-lg">
+            {toast}
+          </div>
+        )}
+      </main>
 
-      {toast && (
-        <div role="status" className="fixed bottom-20 left-1/2 z-40 -translate-x-1/2 rounded-xl bg-room-fg px-4 py-2.5 text-[13.5px] text-room-bg shadow-lg">
-          {toast}
-        </div>
-      )}
+      {/* The review panel. A bottom sheet on a phone. */}
+      {sheet && <button type="button" aria-label="Close comments" onClick={() => setSheet(false)} className="fixed inset-0 z-30 bg-black/30 md:hidden" />}
+      <aside
+        aria-label="Comments"
+        className={`${sheet ? "fixed inset-x-0 bottom-0 z-40 flex h-[78dvh] rounded-t-3xl shadow-[0_-16px_48px_rgb(0_0_0/0.25)]" : "hidden"} min-h-0 flex-col border-room-line bg-room-surface md:static md:z-auto md:h-auto md:rounded-none md:shadow-none ${showPanel ? "md:flex" : "md:hidden"} md:w-[380px] md:shrink-0 md:border-l xl:w-[400px]`}
+      >
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-room-line md:hidden" aria-hidden />
+        {!p.embedded && (
+          <header className="flex flex-col gap-3 px-5 pb-4 pt-4 md:pt-5">
+            <div className="flex items-center justify-between gap-3">
+              <BrandMark token={token ?? ""} name={p.brand.studioName} hasLogo={p.brand.hasLogo} />
+              <div className="flex items-center gap-2">
+                {p.rounds && (
+                  <span className={`num rounded-full px-2.5 py-1 text-[11.5px] font-medium ${p.rounds.over ? "bg-[#fef0c7] text-[#93370d]" : "bg-room-raised text-room-fg-2"}`} title={p.rounds.note ?? undefined}>
+                    {p.rounds.label}
+                  </span>
+                )}
+                <button type="button" aria-label="Close" onClick={() => setSheet(false)} className={`${iconBtn} inline-flex md:hidden`}>
+                  <IconClose />
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <h1 className="text-[18px] font-semibold leading-snug tracking-[-0.015em]">{p.title}</h1>
+              {p.clientName && <p className="text-[12.5px] text-room-muted">For {p.clientName}</p>}
+            </div>
+          </header>
+        )}
+
+        {(p.cover || version.changeNote.trim()) && (
+          <div className="flex flex-col gap-2 px-4 pb-3">
+            {p.cover && <CoverNote shareKey={p.cover.key} studioName={p.brand.studioName} message={p.cover.message} notes={p.cover.notes} />}
+            {version.changeNote.trim() && (
+              <div className="rounded-2xl bg-brand-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-room-fg-2">
+                <span className="font-semibold text-room-fg">What changed in v{version.number}:</span> {version.changeNote}
+              </div>
+            )}
+          </div>
+        )}
+
+        <CommentRail
+          threads={threads}
+          activeId={highlighted}
+          fps={fps}
+          commentsOpen={p.commentsOpen}
+          onActivate={activate}
+          onHover={setHoverId}
+          handlers={handlers}
+          loading={loading}
+          composer={
+            <Composer
+              draft={draft}
+              fps={fps}
+              isVideo={isVideo}
+              audience={audience}
+              disabled={disabledReason}
+              textareaRef={composerBox}
+              onTyping={() => {
+                if (!isVideo) return;
+                stage.current?.pause();
+                const t = stage.current?.time() ?? 0;
+                setDraft({ v: 1, shape: "time", x: 0, y: 0, t, frame: fps ? Math.floor((t * fps.num) / fps.den + 1e-6) : undefined } as Annotation);
+              }}
+              onClearDraft={() => setDraft(null)}
+              onSetOut={setOut}
+              onSubmit={submit}
+            />
+          }
+        />
+
+        {audience === "client" && <DecisionBar version={version} openCount={c.open} assetTitle={asset.title} onDecide={decide} onGoLatest={() => goVersion(latestId)} downloadHref={download} downloadNote={downloadNote} />}
+      </aside>
+
       <ShortcutHelp open={help} onClose={() => setHelp(false)} />
     </div>
   );

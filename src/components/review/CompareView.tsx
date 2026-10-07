@@ -99,7 +99,7 @@ export function CompareView({
         <Link href={backHref} className="text-[13px] font-medium text-brand-text hover:underline">
           ← Back to the review
         </Link>
-        <h1 className="font-display text-[22px] leading-none">Compare · {asset.title}</h1>
+        <h1 className="text-[17px] font-semibold leading-none tracking-[-0.015em]">Compare · {asset.title}</h1>
         <span className="flex-1" />
         {picker("Left", a, setA)}
         {picker("Right", b, setB)}

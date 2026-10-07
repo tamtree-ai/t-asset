@@ -19,7 +19,7 @@ export function Gate({ token, studioName, hasLogo, title, clientName }: { token:
   const clean = (s: string) => [...s.toUpperCase()].filter((c) => PASSCODE_ALPHABET.includes(c)).join("").slice(0, PASSCODE_LENGTH);
 
   return (
-    <main className="flex flex-1 items-center justify-center px-4 py-10">
+    <main className="stage flex flex-1 items-center justify-center px-4 py-10">
       <form
         className="flex w-full max-w-[400px] flex-col gap-6 rounded-2xl border border-room-line bg-room-surface p-7 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_40px_rgb(0_0_0/0.06)]"
         onSubmit={(e) => {
@@ -34,7 +34,7 @@ export function Gate({ token, studioName, hasLogo, title, clientName }: { token:
       >
         <BrandMark token={token} name={studioName} hasLogo={hasLogo} size="lg" />
         <div className="flex flex-col gap-1.5">
-          <h1 className="font-display text-[34px] leading-[1.05]">{title}</h1>
+          <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">{title}</h1>
           <p className="text-[14px] text-room-muted">{clientName ? `Prepared for ${clientName}. ` : ""}Enter the passcode you were sent to open it.</p>
         </div>
         <div className="flex flex-col gap-2">
@@ -51,10 +51,13 @@ export function Gate({ token, studioName, hasLogo, title, clientName }: { token:
             value={code}
             onChange={(e) => setCode(clean(e.target.value))}
             aria-invalid={!!error}
-            aria-describedby={error ? "passcode-error" : undefined}
-            placeholder="ABC123"
+            aria-describedby={error ? "passcode-error passcode-hint" : "passcode-hint"}
+            placeholder="ABC234"
             className="num h-12 rounded-xl border border-room-line bg-room-bg px-4 text-center text-[22px] tracking-[0.35em] text-room-fg placeholder:text-room-muted/50"
           />
+          <p id="passcode-hint" className="text-[12px] text-room-muted">
+            6 letters and numbers. Passcodes never use 0, 1, I, L or O, so they can’t be misread.
+          </p>
           {error && (
             <p id="passcode-error" role="alert" className="text-[13px] text-[#b42318]">
               {error}

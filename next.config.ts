@@ -1,10 +1,13 @@
 import type { NextConfig } from "next";
 
-/** The review room (plan §4.6): the URL carries a credential, so it must not leak in a Referer, be framed, or be indexed. */
+/** Files are served by redirect to a short-lived signed URL on Vercel Blob's host (plan §5.4). */
+const BLOB_HOST = "https://*.blob.vercel-storage.com";
+
+/** The review room: the URL carries a credential, so it must not leak in a Referer, be framed, or be indexed. */
 const REVIEW_CSP = [
   "default-src 'self'",
-  "img-src 'self' data: blob:",
-  "media-src 'self' blob:",
+  `img-src 'self' data: blob: ${BLOB_HOST}`,
+  `media-src 'self' blob: ${BLOB_HOST}`,
   "style-src 'self' 'unsafe-inline'",
   // Next's own bootstrap is inline; dev also needs eval for React's debugging.
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
@@ -34,9 +37,7 @@ const nextConfig: NextConfig = {
   // The app is opened at 127.0.0.1. Dev HMR and client boot are blocked without this.
   allowedDevOrigins: ["127.0.0.1"],
   // Playwright uses its own output so `pnpm dev` can stay up.
-  distDir: process.env.TAMSHOOT_DIST_DIR || ".next",
-  // Standalone mode's Kokoro runs on onnxruntime's native binding: load it from node_modules, never bundle it.
-  serverExternalPackages: ["kokoro-js", "@huggingface/transformers", "onnxruntime-node", "phonemizer"],
+  distDir: process.env.TASSET_DIST_DIR || ".next",
 };
 
 export default nextConfig;

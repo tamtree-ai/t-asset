@@ -9,14 +9,14 @@ import { Client } from "pg";
 import sharp from "sharp";
 
 /**
- * Studio Review end to end (plan §7): the owner sets up a client, project and two assets; a guest
- * opens the link, comments, replies and approves; mail and the download rules follow.
- * Needs ffmpeg on PATH (a video asset is part of the journey), Postgres, and the worker.
+ * t-asset end to end (plan §9): the owner sets up a client, project and two assets; uploads go
+ * straight to the store and the fake Tamtree makes the previews; a guest opens the link, comments,
+ * replies and approves; the download rules follow. Needs ffmpeg on PATH and Postgres.
  */
 test.describe.configure({ mode: "serial" });
 test.setTimeout(240_000);
 
-const db = () => new Client({ connectionString: process.env.DATABASE_URL ?? "postgres://tamshoot:tamshoot@localhost:5433/tamshoot" });
+const db = () => new Client({ connectionString: process.env.DATABASE_URL ?? "postgres://tasset:tasset@localhost:5434/tasset" });
 async function sql<T extends object = Record<string, unknown>>(text: string, params: unknown[] = []): Promise<T[]> {
   const c = db();
   await c.connect();
@@ -53,7 +53,7 @@ async function upload(page: Page, name: string, mimeType: string, buffer: Buffer
 }
 
 async function newGuest(browser: Browser): Promise<Page> {
-  const ctx = await browser.newContext({ baseURL: "http://localhost:3100", storageState: { cookies: [], origins: [] } });
+  const ctx = await browser.newContext({ baseURL: "http://localhost:3200", storageState: { cookies: [], origins: [] } });
   return ctx.newPage();
 }
 
@@ -325,41 +325,27 @@ test("8. the owner uploads v2, the guest compares v1 with v2 and approves with a
   await expect(page.getByText(rows[0]!.file_sha256)).toBeVisible();
 });
 
-test("9. the studio gets the approval mail at once and a digest of the comments later", async () => {
-  // The studio's people: owners and editors of the org that owns this client (other orgs in a dev database don't count).
-  const ownerEmails = (await sql<{ email: string }>("select m.email from members m join studio_clients c on c.org_id = m.org_id where c.name = $1 and m.role in ('owner','editor')", [CLIENT])).map((r) => r.email);
-  const mails = async () => sql<{ subject: string; body: string }>("select subject, body from mail_outbox where to_email = any($1) order by created_at", [ownerEmails]);
+test("9. a file Tamtree can't read says why, with Retry, and the storage meter counts what is stored", async ({ page }) => {
+  await page.goto(projectUrl);
+  await page.getByRole("button", { name: "New asset" }).click();
+  await page.getByLabel("Title").fill("Broken clip");
+  await page.getByLabel(/Video/).check();
+  await page.getByRole("button", { name: "Add asset" }).click();
+  await expect(page).toHaveURL(/\/studio\/assets\//);
+  await upload(page, "broken.mp4", "video/mp4", Buffer.from("this is not a video at all"), "Oops", 1);
+  await expect(page.getByText("Tamtree couldn’t prepare this file")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/couldn't be read|no video/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByText("Tamtree couldn’t prepare this file")).toBeVisible({ timeout: 60_000 });
 
-  // Approval: sent by the worker as soon as the job runs.
-  await expect.poll(async () => (await mails()).some((m) => m.subject.startsWith("Approved: Instagram banner")), { timeout: 60_000 }).toBe(true);
-
-  // The digest waits five quiet minutes: back-date the project's comments instead of waiting, and the sweep (every minute) sends it.
-  // (A reply written by the studio belongs to the project, not to a share, so the project is the scope.)
-  await sql("update studio_events set created_at = now() - interval '10 minutes' where type in ('comment.added','comment.replied') and notified_at is null and project_id in (select p.id from studio_projects p join studio_clients c on c.id = p.client_id where c.name = $1)", [CLIENT]);
-  await expect.poll(async () => (await mails()).some((m) => /new comments?.* on Round one/.test(m.subject)), { timeout: 120_000 }).toBe(true);
-  const digest = (await mails()).find((m) => /new comments?.* on Round one/.test(m.subject) && m.body.includes("The logo is too small here"))!;
-  expect(digest).toBeTruthy();
-  expect(digest.body).toContain("The logo is too small here");
-  expect(digest.body).not.toContain("Client always asks for the logo bigger");
+  await expect(page.getByTestId("storage-meter")).toContainText(/ of 900(\.0)? MB/);
+  await expect(page.getByTestId("storage-meter")).not.toHaveText(/^0 B/);
 });
 
-test("10. the studio hears back by mail too: a reply reaches the guest, who can stop the emails", async ({ browser }) => {
-  const email = `sam-${stamp}@example.com`;
-  await sql("update studio_events set created_at = now() - interval '10 minutes' where type = 'comment.replied' and notified_at is null and project_id in (select p.id from studio_projects p join studio_clients c on c.id = p.client_id where c.name = $1)", [CLIENT]);
-  const mails = async () => sql<{ subject: string; body: string }>("select subject, body from mail_outbox where to_email = $1 order by created_at", [email]);
-  await expect.poll(async () => (await mails()).some((m) => /replied to your comment/.test(m.subject)), { timeout: 120_000 }).toBe(true);
-  const mail = (await mails()).find((m) => /replied to your comment/.test(m.subject))!;
-  expect(mail.body).toContain("Good catch, doubling it for v2");
-  const unsub = mail.body.match(/\/review\/unsubscribe\/[\w-]+/)![0];
-
-  const stranger = await newGuest(browser);
-  await stranger.goto(unsub);
-  await expect(stranger.getByRole("heading", { name: "Stop these emails?" })).toBeVisible();
-  // Opening the link alone changes nothing (mail scanners open links).
-  expect((await sql<{ notify: boolean }>("select notify from studio_reviewers where email = $1", [email]))[0]!.notify).toBe(true);
-  await stranger.getByRole("button", { name: "Stop the emails" }).click();
-  await expect(stranger.getByRole("status")).toContainText("No more emails");
-  expect((await sql<{ notify: boolean }>("select notify from studio_reviewers where email = $1", [email]))[0]!.notify).toBe(false);
+test("10. Tamtree's API is closed without its token", async ({ request }) => {
+  expect((await request.get("/api/tamtree/pending")).status()).toBe(401);
+  expect((await request.get("/api/tamtree/pending", { headers: { authorization: "Bearer e2e-tamtree-token" } })).status()).toBe(200);
 });
 
 test("11. ending the link locks the guest out, with a branded page", async ({ page }) => {
@@ -385,7 +371,7 @@ test("12. the page doesn't scroll sideways on a phone", async ({ browser, page }
   const url = await page.getByLabel("Review link").inputValue();
   const code = (await page.getByLabel("Passcode", { exact: true }).inputValue()).replace(/\s/g, "");
 
-  const ctx = await browser.newContext({ baseURL: "http://localhost:3100", viewport: { width: 390, height: 844 }, hasTouch: true, storageState: { cookies: [], origins: [] } });
+  const ctx = await browser.newContext({ baseURL: "http://localhost:3200", viewport: { width: 390, height: 844 }, hasTouch: true, storageState: { cookies: [], origins: [] } });
   const phone = await ctx.newPage();
   await phone.goto(url);
   await phone.getByLabel("Passcode").fill(code);

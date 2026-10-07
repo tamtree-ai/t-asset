@@ -11,7 +11,7 @@ const prod = {
   STUDIO_SECRET: HEX,
   APP_URL: "https://review.example.com",
   OWNER_EMAIL: "Me@Example.com",
-  OWNER_PASSWORD_HASH: "scrypt$x",
+  OWNER_PASSWORD_HASH: "scrypt:x",
   TAMTREE_API_TOKEN: "t",
   TAMTREE_WEBHOOK_URL: "https://tamtree.example.com/webhook/tasset",
   TAMTREE_WEBHOOK_SECRET: "s",

@@ -76,7 +76,7 @@ export type StartedUpload = {
   key: string;
   driver: "vercel" | "local";
   multipart: boolean;
-  /** One PUT that uploads the whole file; null when the browser uploads in parts through `/api/uploads/sign`. */
+  /** Local driver: one PUT that uploads the whole file. Vercel Blob: null, and the browser uses the SDK's `uploadPresigned` against `/api/uploads/sign`. */
   target: { method: "PUT"; url: string; headers: Record<string, string> } | null;
 };
 
@@ -109,7 +109,7 @@ export async function startUpload(input: { orgId: string; variationId: string; n
 
   const store = getBlobStore();
   const multipart = store.driver === "vercel" && input.bytes > MULTIPART_ABOVE;
-  const upload = multipart ? null : await store.uploadTarget(key, { contentType: mime, maxBytes: input.bytes, validForS: 15 * 60 });
+  const upload = store.driver === "local" ? await store.uploadTarget(key, { contentType: mime, maxBytes: input.bytes, validForS: 15 * 60 }) : null;
   return { fileId, key, driver: store.driver, multipart, target: upload && { method: upload.method, url: upload.url, headers: upload.headers } };
 }
 

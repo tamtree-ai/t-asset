@@ -37,9 +37,9 @@ export function parseProbe(json: Probe): VideoInfo {
   };
 }
 
-/** The proxy's size: fits 1920×1080 (or 1080×1920 for portrait), never upscaled, both sides even for H.264. */
+/** The proxy's size: fits 1280×720 (or 720×1280 for portrait), never upscaled, both sides even for H.264. 720p keeps the free 1 GB store and 10 GB of monthly transfer going (plan §5.3). */
 export function proxySize(width: number, height: number): { width: number; height: number } {
-  const [maxW, maxH] = width >= height ? [1920, 1080] : [1080, 1920];
+  const [maxW, maxH] = width >= height ? [1280, 720] : [720, 1280];
   const k = Math.min(1, maxW / width, maxH / height);
   const even = (n: number) => Math.max(2, Math.round((n * k) / 2) * 2);
   return { width: even(width), height: even(height) };

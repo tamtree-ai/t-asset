@@ -22,7 +22,8 @@ export const MAX_VIDEO_BYTES = 500 * 1024 ** 2;
 /** Above this the browser uploads in parts (Vercel Blob multipart). */
 export const MULTIPART_ABOVE = 100 * 1024 ** 2;
 
-export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif", "image/tiff"];
+/** Only types every browser shows as they are: an image is reviewed from its original, with no Tamtree step. */
+export const IMAGE_TYPES = ["image/png", "image/jpeg"];
 export const VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm", "video/x-matroska"];
 
 export type Rendition = "original" | "preview" | "poster" | "thumb" | "wm";
@@ -39,19 +40,21 @@ type FileRow = typeof schema.studioFiles.$inferSelect;
 /** The blob and content type for one rendition of a file; null while it has not been made (or does not exist for this kind). */
 export function renditionOf(file: FileRow, r: Rendition): { key: string; mime: string } | null {
   const video = file.mime.startsWith("video/");
+  // An image's renditions are its original (see `finishUpload`), so they keep its type.
+  const of = (key: string | null, made: string) => (key ? { key, mime: key === file.originalKey ? file.mime : made } : null);
   switch (r) {
     case "original":
       // A video whose original was deleted to save space downloads as its clean preview.
       if (file.originalKey) return { key: file.originalKey, mime: file.mime };
-      return file.previewKey ? { key: file.previewKey, mime: video ? "video/mp4" : "image/webp" } : null;
+      return of(file.previewKey, video ? "video/mp4" : "image/webp");
     case "preview":
-      return file.previewKey ? { key: file.previewKey, mime: video ? "video/mp4" : "image/webp" } : null;
+      return of(file.previewKey, video ? "video/mp4" : "image/webp");
     case "wm":
-      return file.wmPreviewKey ? { key: file.wmPreviewKey, mime: video ? "video/mp4" : "image/webp" } : null;
+      return of(file.wmPreviewKey, video ? "video/mp4" : "image/webp");
     case "poster":
-      return file.posterKey ? { key: file.posterKey, mime: "image/jpeg" } : null;
+      return of(file.posterKey, "image/jpeg");
     case "thumb":
-      return file.thumbKey ? { key: file.thumbKey, mime: "image/webp" } : null;
+      return of(file.thumbKey, "image/webp");
   }
 }
 
@@ -89,7 +92,7 @@ export async function startUpload(input: { orgId: string; variationId: string; n
   if (!types.includes(mime)) {
     throw new UploadError(
       target.kind === "image"
-        ? `This asset takes a PNG, JPG, WebP, GIF, AVIF or TIFF image, and that file is ${mime || "of an unknown type"}.`
+        ? `This asset takes a PNG or JPG image, and that file is ${mime || "of an unknown type"}.`
         : `This asset takes an MP4, MOV, WebM or MKV video, and that file is ${mime || "of an unknown type"}.`,
     );
   }
@@ -119,37 +122,61 @@ export async function uploadingFile(orgId: string, fileId: string): Promise<File
   return f && f.processing === "uploading" ? f : null;
 }
 
+/** What the owner's browser measured of an image before sending it: the hash a sign-off records, and its size. */
+export type ImageFacts = { sha256: string; width: number; height: number };
+
 /**
- * Step 3: the bytes are in the store and the right size, so the file becomes a version (state
- * `pending`) for Tamtree to process. Calling it twice for one file returns the same version.
+ * Step 3: the bytes are in the store and the right size, so the file becomes a version. A video
+ * waits for Tamtree (state `pending`); an image is ready at once, reviewed from its original, with
+ * the facts the browser measured. Calling it twice for one file returns the same version.
  */
-export async function finishUpload(input: { orgId: string; memberId: string; fileId: string; variationId: string; changeNote: string }): Promise<{ fileId: string; versionId: string; number: number; alreadyDone: boolean }> {
+export async function finishUpload(input: {
+  orgId: string;
+  memberId: string;
+  fileId: string;
+  variationId: string;
+  changeNote: string;
+  image?: ImageFacts;
+}): Promise<{ fileId: string; versionId: string; number: number; alreadyDone: boolean; ready: boolean }> {
   const file = await getFile(input.orgId, input.fileId);
   if (!file) throw new UploadError("That upload was not found. Start it again.");
   if (file.processing !== "uploading") {
     const [v] = await db.select({ id: schema.studioVersions.id, number: schema.studioVersions.number }).from(schema.studioVersions).where(eq(schema.studioVersions.fileId, file.id)).limit(1);
-    if (v) return { fileId: file.id, versionId: v.id, number: v.number, alreadyDone: true };
+    if (v) return { fileId: file.id, versionId: v.id, number: v.number, alreadyDone: true, ready: file.processing === "ready" };
     throw new UploadError("That upload was not found. Start it again.");
   }
   const target = await variationTarget(input.orgId, input.variationId);
   if (!target) throw new UploadError("That variation was not found.");
   if (!file.mime.startsWith(`${target.kind}/`)) throw new UploadError(`This asset takes ${target.kind === "image" ? "an image" : "a video"}.`);
+  if (target.kind === "image" && !input.image) throw new UploadError("The image's size and fingerprint are missing. Upload it again.");
 
   const head = await getBlobStore().head(file.originalKey!);
   if (!head) throw new UploadError("The file didn't arrive. Upload it again.");
   if (head.size !== file.bytes) throw new UploadError(`The file arrived incomplete (${head.size} of ${file.bytes} bytes). Upload it again.`);
 
-  const created = await insertVersion(input, file.id);
+  const ready: Partial<FileRow> | null =
+    target.kind === "image" && input.image
+      ? {
+          processing: "ready",
+          previewKey: file.originalKey,
+          wmPreviewKey: file.originalKey,
+          thumbKey: file.originalKey,
+          sha256: input.image.sha256.toLowerCase(),
+          width: input.image.width,
+          height: input.image.height,
+        }
+      : null;
+  const created = await insertVersion(input, file.id, ready ?? { processing: "pending" });
   await logEvent({ orgId: input.orgId, projectId: target.projectId, actorLabel: "You", type: "version.uploaded", payload: { where: `${target.title} · ${target.label} v${created.number}`, versionId: created.id } });
-  return { fileId: file.id, versionId: created.id, number: created.number, alreadyDone: false };
+  return { fileId: file.id, versionId: created.id, number: created.number, alreadyDone: false, ready: !!ready };
 }
 
-/** Marks the file `pending` and adds the next version number, together. Two uploads to one variation at once pick the same number; the unique index rejects the second, which tries again. */
-async function insertVersion(input: { memberId: string; variationId: string; changeNote: string }, fileId: string) {
+/** Sets the file's state and adds the next version number, together. Two uploads to one variation at once pick the same number; the unique index rejects the second, which tries again. */
+async function insertVersion(input: { memberId: string; variationId: string; changeNote: string }, fileId: string, state: Partial<FileRow>) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await db.transaction(async (tx) => {
-        await tx.update(schema.studioFiles).set({ processing: "pending", error: null }).where(eq(schema.studioFiles.id, fileId));
+        await tx.update(schema.studioFiles).set({ ...state, error: null }).where(eq(schema.studioFiles.id, fileId));
         const [next] = await tx
           .select({ n: sql<number>`coalesce(max(${schema.studioVersions.number}), 0) + 1` })
           .from(schema.studioVersions)

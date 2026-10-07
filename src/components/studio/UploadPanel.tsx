@@ -9,7 +9,7 @@ import { cardCls, inputCls, primaryBtn, quietBtn } from "./kit";
 const MB = 1024 * 1024;
 const LIMITS = { image: { bytes: 30 * MB, label: "30 MB" }, video: { bytes: 500 * MB, label: "500 MB" } };
 const ACCEPT = {
-  image: "image/png,image/jpeg,image/webp,image/gif,image/avif,image/tiff",
+  image: "image/png,image/jpeg",
   video: "video/mp4,video/quicktime,video/webm,video/x-matroska",
 };
 
@@ -38,10 +38,27 @@ function putWithProgress(file: File, target: NonNullable<Started["target"]>, onP
   });
 }
 
+type ImageFacts = { sha256: string; width: number; height: number };
+
+/** An image is reviewed from its original, so the browser takes the hash and size the server would otherwise get from Tamtree. */
+async function measureImage(file: File): Promise<ImageFacts> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file); // applies EXIF orientation, so width and height are as shown
+  } catch {
+    throw new Error(`“${file.name}” couldn't be read as an image. Export it as a PNG or JPG and try again.`);
+  }
+  const { width, height } = bitmap;
+  bitmap.close();
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  const sha256 = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  return { sha256, width, height };
+}
+
 /**
  * Drag a file in, say what changed, watch it upload (plan §5.2). The bytes go straight from the
- * browser to the store; the app only checks the file first and records it after. Tamtree then
- * makes the previews.
+ * browser to the store; the app only checks the file first and records it after. An image is
+ * ready at once; Tamtree makes a video's previews.
  */
 export function UploadPanel({ assetId, variationId, kind, nextNumber }: { assetId: string; variationId: string; kind: "image" | "video"; nextNumber: number }) {
   const router = useRouter();
@@ -55,7 +72,7 @@ export function UploadPanel({ assetId, variationId, kind, nextNumber }: { assetI
   function pick(f: File | undefined) {
     setError(null);
     if (!f) return;
-    if (!ACCEPT[kind].split(",").includes(f.type)) return setError(`This asset takes ${kind === "image" ? "a PNG, JPG, WebP, GIF, AVIF or TIFF image" : "an MP4, MOV, WebM or MKV video"}. “${f.name}” is ${f.type || "an unknown type"}.`);
+    if (!ACCEPT[kind].split(",").includes(f.type)) return setError(`This asset takes ${kind === "image" ? "a PNG or JPG image" : "an MP4, MOV, WebM or MKV video"}. “${f.name}” is ${f.type || "an unknown type"}.`);
     if (f.size > LIMITS[kind].bytes) return setError(`That file is over the ${LIMITS[kind].label} limit. Export a smaller one.`);
     setFile(f);
   }
@@ -65,6 +82,7 @@ export function UploadPanel({ assetId, variationId, kind, nextNumber }: { assetI
     setError(null);
     setProgress(0);
     try {
+      const image = kind === "image" ? await measureImage(file) : undefined;
       const started = await postJson<Started>("/api/uploads/init", { variationId, name: file.name, mime: file.type, bytes: file.size });
       if (!started.ok) throw new Error(started.error);
       const s = started.data;
@@ -81,7 +99,7 @@ export function UploadPanel({ assetId, variationId, kind, nextNumber }: { assetI
           onUploadProgress: (e) => setProgress(e.percentage / 100),
         });
       }
-      const done = await postJson<{ versionId: string }>("/api/uploads/complete", { fileId: s.fileId, variationId, note });
+      const done = await postJson<{ versionId: string }>("/api/uploads/complete", { fileId: s.fileId, variationId, note, image });
       if (!done.ok) throw new Error(done.error);
       setFile(null);
       setNote("");
@@ -111,7 +129,7 @@ export function UploadPanel({ assetId, variationId, kind, nextNumber }: { assetI
         className={`flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-6 text-center ${over ? "border-accent bg-accent-soft" : "border-line"}`}
       >
         <p className="text-[13.5px] text-fg-2">{file ? file.name : `Drop ${kind === "image" ? "an image" : "a video"} here to add v${nextNumber}`}</p>
-        <p className="text-[12px] text-fg-muted">Up to {LIMITS[kind].label}. Tamtree makes the previews after the upload.</p>
+        <p className="text-[12px] text-fg-muted">Up to {LIMITS[kind].label}.{kind === "image" ? " PNG or JPG, shown exactly as uploaded." : " Tamtree makes the previews after the upload."}</p>
         <button type="button" className={quietBtn} disabled={busy} onClick={() => input.current?.click()}>
           {file ? "Choose a different file" : "Choose a file"}
         </button>

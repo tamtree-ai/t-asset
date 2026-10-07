@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.next-e2e/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.env*.local
+.env
+.vercel
+.blob-data/
+.blob-data-e2e/
+e2e/.auth/
+test-results/
+playwright-report/
+.DS_Store

@@ -1,0 +1,253 @@
+@import "tailwindcss";
+
+/*
+ * t-asset design tokens (carried over from t-shoot) — from the final canvas row (Studio.dc.html and siblings).
+ * 03-experience §5: ink ground, one accent (orange = brand / happening now / selection),
+ * green = Ready only, amber = needs you (always with an icon). Dark only in v1.
+ */
+@theme {
+  --color-canvas: #0a0a0c;
+  /* Script.dc.html's slightly lighter ground (its own screen, not a token typo). */
+  --color-canvas-script: #0e0e10;
+  --color-panel: #111114;
+  --color-panel-2: #121215;
+  --color-raised: #16161a;
+  --color-raised-2: #18181c;
+  --color-hover: #1b1b1f;
+  --color-rule: #1f1f24;
+  --color-rule-2: #222227;
+  --color-line: #2e2e34;
+  --color-line-strong: #34343b;
+
+  /* The "changed by your note" pill and its row highlight (Script.dc.html). */
+  --color-changed-bg: #17130f;
+  --color-changed-pill-bg: #3a2219;
+  --color-changed-pill-fg: #ffd2c2;
+
+  --color-fg: #ededef;
+  --color-fg-2: #c9c9d0;
+  --color-fg-3: #a1a1aa;
+  /* The dimmest text allowed on panels (WCAG AA on #111114). */
+  --color-fg-muted: #85858f;
+
+  --color-accent: #ff6a3d;
+  --color-accent-ink: #1a0b05;
+  --color-accent-soft: rgb(255 106 61 / 0.12);
+  --color-accent-link: #ff8a64;
+  --color-ready: #6fcf97;
+  --color-attention: #f2c14e;
+  --color-attention-soft: #1a1812;
+  --color-attention-line: #4a3e1c;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-display: var(--font-instrument-serif), Georgia, serif;
+
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-phone: 40px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+ * Studio Review's client room: its own light, brand-driven theme (plan §5.4). The `.room` wrapper
+ * gets its variables from the studio's brand (lib/studio/color.ts); these map them to utilities.
+ */
+@theme inline {
+  --color-room-bg: var(--room-bg);
+  --color-room-surface: var(--room-surface);
+  --color-room-raised: var(--room-raised);
+  --color-room-line: var(--room-line);
+  --color-room-fg: var(--room-fg);
+  --color-room-fg-2: var(--room-fg-2);
+  --color-room-muted: var(--room-fg-muted);
+  --color-brand: var(--brand-accent);
+  --color-brand-hover: var(--brand-accent-hover);
+  --color-brand-ink: var(--brand-accent-ink);
+  --color-brand-text: var(--brand-accent-text);
+  --color-brand-soft: var(--brand-accent-soft);
+}
+
+.room {
+  background: var(--room-bg);
+  color: var(--room-fg);
+  font-family: var(--font-sans);
+  min-height: 100dvh;
+}
+.room :focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Every number is tabular (03 §5). */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+/* The only looping animation in the product: the dot of a scene that is filming. */
+@keyframes filming-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.animate-filming {
+  animation: filming-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-filming {
+    animation: none;
+  }
+}
+
+/* Guide document. The markdown renderer emits these elements and nothing else. */
+.guide-doc {
+  font-size: 16.5px;
+  line-height: 1.7;
+  color: var(--color-fg-2);
+}
+.guide-doc > * + * {
+  margin-top: 0.85em;
+}
+.guide-doc h1 {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  color: var(--color-fg);
+  margin-top: 0;
+}
+.guide-doc h2 {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.15;
+  color: var(--color-fg);
+  margin-top: 1.7em;
+  padding-top: 0.2em;
+}
+.guide-doc h3 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-fg);
+  margin-top: 1.45em;
+}
+.guide-doc p {
+  margin: 0;
+}
+.guide-doc a {
+  color: var(--color-accent-link);
+  text-underline-offset: 3px;
+}
+.guide-doc a:hover {
+  text-decoration: underline;
+}
+.guide-doc strong {
+  color: var(--color-fg);
+  font-weight: 600;
+}
+.guide-doc ul,
+.guide-doc ol {
+  margin: 0.2em 0 0.2em;
+  padding-left: 1.3em;
+}
+.guide-doc li + li {
+  margin-top: 0.35em;
+}
+.guide-doc li::marker {
+  color: var(--color-fg-muted);
+}
+.guide-doc code {
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  color: var(--color-fg);
+  background: var(--color-raised);
+  border: 1px solid var(--color-rule);
+  border-radius: 4px;
+  padding: 0.08em 0.35em;
+}
+.guide-doc pre {
+  margin: 0;
+  overflow-x: auto;
+  border: 1px solid var(--color-rule);
+  border-radius: 12px;
+  background: #070709;
+  padding: 14px 16px;
+}
+.guide-doc pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-fg-2);
+}
+.guide-doc blockquote {
+  margin: 0;
+  border-left: 3px solid var(--color-accent);
+  border-radius: 0 10px 10px 0;
+  background: var(--color-accent-soft);
+  padding: 12px 16px;
+  color: var(--color-fg);
+}
+.guide-doc blockquote p + p {
+  margin-top: 0.5em;
+}
+.guide-doc hr {
+  border: 0;
+  border-top: 1px solid var(--color-rule);
+  margin: 1.8em 0;
+}
+.guide-doc table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.guide-doc th,
+.guide-doc td {
+  text-align: left;
+  vertical-align: top;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--color-rule);
+}
+.guide-doc th {
+  color: var(--color-fg-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.guide-doc tr:last-child td {
+  border-bottom: 0;
+}
+.guide-doc .table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-rule);
+  border-radius: 12px;
+  background: var(--color-panel);
+}

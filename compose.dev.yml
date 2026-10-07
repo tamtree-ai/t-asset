@@ -1,0 +1,19 @@
+# t-asset's dev Postgres. Port 5434: Tamtree holds 5432 and t-shoot 5433.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: tasset
+      POSTGRES_PASSWORD: tasset
+      POSTGRES_DB: tasset
+    ports:
+      - "5434:5432"
+    volumes:
+      - tasset-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tasset"]
+      interval: 2s
+      retries: 20
+
+volumes:
+  tasset-pg:

@@ -14,6 +14,9 @@ export async function POST(req: Request) {
     const res = await handleUploadPresigned({
       body,
       request: req,
+      // The SDK refuses to run without a webhook key, but it only checks one on upload-completed
+      // callbacks, which this route never asks for. A placeholder keeps it from throwing.
+      webhookPublicKey: process.env.BLOB_WEBHOOK_PUBLIC_KEY || "unused",
       getSignedToken: async (pathname, clientPayload) => {
         const member = await ownerOrNull();
         if (!member) throw new Error("Sign in first.");
@@ -26,6 +29,7 @@ export async function POST(req: Request) {
     });
     return Response.json(res);
   } catch (e) {
+    console.error("[upload sign]", e);
     return Response.json({ error: (e as Error).message }, { status: 400 });
   }
 }

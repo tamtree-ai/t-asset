@@ -15,7 +15,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "hash-password": "tsx scripts/hash-password.ts",
-    "fake-tamtree": "tsx --env-file-if-exists=.env.local scripts/fake-tamtree.ts"
+    "fake-tamtree": "tsx --env-file-if-exists=.env.local scripts/fake-tamtree.ts",
+    "phase0": "tsx --env-file-if-exists=.env.local scripts/phase0-blob.ts"
   },
   "packageManager": "pnpm@11.17.0",
   "dependencies": {

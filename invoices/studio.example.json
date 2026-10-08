@@ -1,0 +1,10 @@
+{
+  "name": "Photodynamics Photography",
+  "abn": "78116965476",
+  "address": "15 Foxall Street\nGrantham Farm NSW 2765",
+  "gstRegistered": false,
+  "bank": { "accountName": null, "bsb": null, "accountNo": null },
+  "payByPost": true,
+  "termsDays": 30,
+  "logo": "logo.png"
+}

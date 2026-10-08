@@ -17,7 +17,8 @@
     "hash-password": "tsx scripts/hash-password.ts",
     "fake-tamtree": "tsx --env-file-if-exists=.env.local scripts/fake-tamtree.ts",
     "phase0": "tsx --env-file-if-exists=.env.local scripts/phase0-blob.ts",
-    "seed:demo": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/seed-demo.ts"
+    "seed:demo": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/seed-demo.ts",
+    "invoice": "tsx scripts/invoice.ts"
   },
   "packageManager": "pnpm@11.17.0",
   "dependencies": {

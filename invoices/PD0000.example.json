@@ -1,0 +1,11 @@
+{
+  "number": "PD0000",
+  "issueDate": "2026-10-08",
+  "billTo": { "name": "Client name", "company": "Organisation", "address": null },
+  "lines": [
+    { "description": "Backdrop design for print", "detail": "4 m × 2.2 m", "qty": 1, "unitPrice": 120 },
+    { "description": "TV screen display design", "detail": "One design per screen", "qty": 3, "unitPrice": 40 }
+  ],
+  "discount": { "amount": 110, "label": "Discount" },
+  "expectTotal": 130
+}

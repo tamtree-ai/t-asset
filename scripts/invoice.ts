@@ -61,13 +61,11 @@ async function main() {
   const s = studioFile.parse(JSON.parse(await readFile(studioPath, "utf8")));
   const inv = invoiceFile.parse(JSON.parse(await readFile(file, "utf8")));
 
-  let logo: string | null = null;
-  if (s.logo) {
-    const p = path.resolve(path.dirname(studioPath), s.logo);
-    const mime = MIME[path.extname(p).toLowerCase()];
-    if (!mime) throw new Error(`The logo must be PNG, JPEG, WebP or SVG: ${p}`);
-    logo = `data:${mime};base64,${(await readFile(p)).toString("base64")}`;
-  }
+  // Without a "logo" in studio.json, the studio's default logo (the app uses the same file).
+  const logoPath = s.logo ? path.resolve(path.dirname(studioPath), s.logo) : path.resolve("src/assets/invoice-logo.png");
+  const mime = MIME[path.extname(logoPath).toLowerCase()];
+  if (!mime) throw new Error(`The logo must be PNG, JPEG, WebP or SVG: ${logoPath}`);
+  const logo = `data:${mime};base64,${(await readFile(logoPath)).toString("base64")}`;
 
   const doc: InvoiceDoc = {
     number: inv.number,

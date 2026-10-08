@@ -24,7 +24,7 @@ type Values = {
 
 const MAX_LOGO_BYTES = 150_000;
 
-export function InvoicingForm({ initial }: { initial: Values }) {
+export function InvoicingForm({ initial, defaultLogo }: { initial: Values; defaultLogo: string | null }) {
   const { run, error, pending, setError } = useRunner();
   const [v, setV] = useState(initial);
   const [saved, setSaved] = useState(false);
@@ -32,6 +32,8 @@ export function InvoicingForm({ initial }: { initial: Values }) {
     setSaved(false);
     setV((p) => ({ ...p, [k]: val }));
   };
+
+  const shownLogo = v.invoiceLogo ?? defaultLogo;
 
   function pickLogo(file: File | undefined) {
     if (!file) return;
@@ -66,11 +68,11 @@ export function InvoicingForm({ initial }: { initial: Values }) {
         <Field label="Address" hint="As it should print, one line per row.">
           <textarea className={textareaCls} rows={3} value={v.address} maxLength={300} onChange={(e) => set("address", e.target.value)} placeholder={"Street\nSuburb STATE postcode"} />
         </Field>
-        <Field label="Logo" hint="PNG, JPEG, WebP or SVG, under 150 KB. Without one, the name is printed in its place.">
+        <Field label="Logo" hint={`PNG, JPEG, WebP or SVG, under 150 KB. ${v.invoiceLogo ? "Remove it to go back to the default logo." : defaultLogo ? "Showing the default logo until you choose another." : "Without one, the name is printed in its place."}`}>
           <span className="flex flex-wrap items-center gap-3">
-            {v.invoiceLogo && (
+            {shownLogo && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={v.invoiceLogo} alt="Current logo" className="h-12 max-w-[200px] rounded bg-white object-contain p-1" />
+              <img src={shownLogo} alt={v.invoiceLogo ? "Current logo" : "Default logo"} className="h-12 max-w-[200px] rounded bg-white object-contain p-1" />
             )}
             <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" aria-label="Choose a logo" className="text-[12.5px] text-fg-3 file:mr-3 file:rounded-lg file:border file:border-line file:bg-canvas file:px-3 file:py-1.5 file:text-fg-2" onChange={(e) => pickLogo(e.target.files?.[0])} />
             {v.invoiceLogo && (

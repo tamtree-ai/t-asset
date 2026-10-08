@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Page, Title } from "@/components/studio/kit";
 import { StudioHeader } from "@/components/studio/StudioHeader";
 import { getCurrentMember } from "@/lib/auth";
+import { defaultInvoiceLogo } from "@/services/studio/default-logo";
 import { getInvoiceSettings } from "@/services/studio/invoices";
 
 import { InvoicingForm } from "./InvoicingForm";
@@ -38,7 +39,7 @@ export default async function InvoicingSettingsPage() {
         >
           Invoicing
         </Title>
-        <InvoicingForm initial={s} />
+        <InvoicingForm initial={s} defaultLogo={defaultInvoiceLogo()} />
       </Page>
     </>
   );

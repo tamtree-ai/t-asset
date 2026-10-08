@@ -1,7 +1,7 @@
 # Invoices without the studio running
 
 ```bash
-cp invoices/studio.example.json invoices/studio.json   # once: your ABN, address, bank, logo
+cp invoices/studio.example.json invoices/studio.json   # once: your ABN, address, bank (logo: src/assets/invoice-logo.png unless you set "logo")
 cp invoices/PD0000.example.json invoices/PD6326.json   # per invoice
 pnpm invoice invoices/PD6326.json                       # → invoices/out/PD6326.pdf
 ```

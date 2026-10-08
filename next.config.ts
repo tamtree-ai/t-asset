@@ -34,6 +34,8 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // The invoice logo is read from disk at runtime, so it has to ship with the server functions.
+  outputFileTracingIncludes: { "/**": ["./src/assets/invoice-logo.png"] },
   // The app is opened at 127.0.0.1. Dev HMR and client boot are blocked without this.
   allowedDevOrigins: ["127.0.0.1"],
   // Playwright uses its own output so `pnpm dev` can stay up.

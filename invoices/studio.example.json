@@ -5,6 +5,5 @@
   "gstRegistered": false,
   "bank": { "accountName": null, "bsb": null, "accountNo": null },
   "payByPost": true,
-  "termsDays": 30,
-  "logo": "logo.png"
+  "termsDays": 30
 }

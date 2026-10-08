@@ -13,6 +13,7 @@ import { StudioError } from "@/lib/studio/errors";
 import { addDays, computeTotals, DEFAULT_TERMS, type InvoiceBillTo, type InvoiceDiscount, type InvoiceDoc, InvoiceError, type InvoiceStudio, isLogoDataUrl } from "@/lib/studio/invoice";
 
 import { getBrand } from "./brand";
+import { defaultInvoiceLogo } from "./default-logo";
 import { logEvent } from "./events";
 
 export type InvoiceRow = typeof schema.studioInvoices.$inferSelect;
@@ -135,7 +136,7 @@ export async function liveStudio(orgId: string): Promise<InvoiceStudio> {
     bankAccountNo: s.bankAccountNo || null,
     payByPost: s.payByPost,
     terms: s.invoiceTerms,
-    logo: s.invoiceLogo,
+    logo: s.invoiceLogo ?? defaultInvoiceLogo(),
   };
 }
 

@@ -57,14 +57,14 @@ export function InvoicingForm({ initial }: { initial: Values }) {
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name on invoices" hint="Leave blank to use the studio name.">
-            <input className={inputCls} value={v.legalName} maxLength={100} onChange={(e) => set("legalName", e.target.value)} placeholder="Photodynamics Photography" />
+            <input className={inputCls} value={v.legalName} maxLength={100} onChange={(e) => set("legalName", e.target.value)} placeholder="Trading name" />
           </Field>
           <Field label="ABN">
-            <input className={inputCls} value={v.abn} onChange={(e) => set("abn", e.target.value)} placeholder="78 116 965 476" inputMode="numeric" />
+            <input className={inputCls} value={v.abn} onChange={(e) => set("abn", e.target.value)} placeholder="11 digits" inputMode="numeric" />
           </Field>
         </div>
         <Field label="Address" hint="As it should print, one line per row.">
-          <textarea className={textareaCls} rows={3} value={v.address} maxLength={300} onChange={(e) => set("address", e.target.value)} placeholder={"15 Foxall Street\nGrantham Farm NSW 2765"} />
+          <textarea className={textareaCls} rows={3} value={v.address} maxLength={300} onChange={(e) => set("address", e.target.value)} placeholder={"Street\nSuburb STATE postcode"} />
         </Field>
         <Field label="Logo" hint="PNG, JPEG, WebP or SVG, under 150 KB. Without one, the name is printed in its place.">
           <span className="flex flex-wrap items-center gap-3">
@@ -95,10 +95,10 @@ export function InvoicingForm({ initial }: { initial: Values }) {
         </h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Account name">
-            <input className={inputCls} value={v.bankAccountName} maxLength={100} onChange={(e) => set("bankAccountName", e.target.value)} placeholder="Photodynamics" />
+            <input className={inputCls} value={v.bankAccountName} maxLength={100} onChange={(e) => set("bankAccountName", e.target.value)} placeholder="Name on the account" />
           </Field>
           <Field label="BSB">
-            <input className={inputCls} value={v.bankBsb} onChange={(e) => set("bankBsb", e.target.value)} placeholder="062-000" inputMode="numeric" />
+            <input className={inputCls} value={v.bankBsb} onChange={(e) => set("bankBsb", e.target.value)} placeholder="000-000" inputMode="numeric" />
           </Field>
           <Field label="Account number">
             <input className={inputCls} value={v.bankAccountNo} onChange={(e) => set("bankAccountNo", e.target.value)} inputMode="numeric" />

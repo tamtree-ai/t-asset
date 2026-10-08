@@ -149,6 +149,25 @@ describe("drafts and issuing", () => {
     expect((await inv.listInvoices(a.orgId, { clientId: client.id }))[0]!.id).toBe(copy.id); // drafts first
   });
 
+  it("edits an issued invoice in place until it's paid", async () => {
+    const client = await clients.createClient(a.orgId, { name: "Revise Co" });
+    await inv.saveInvoiceSettings(a.orgId, settings({ nextInvoiceNo: 8000 }));
+    const d = await inv.createInvoice(a.orgId, { clientId: client.id });
+    await expect(inv.reviseInvoice(a.orgId, d.id, PD6325, "x")).rejects.toThrow(/draft is saved/);
+    await inv.updateDraft(a.orgId, d.id, PD6325);
+    const issued = await inv.issueInvoice(a.orgId, d.id, "x");
+
+    await inv.saveInvoiceSettings(a.orgId, settings({ address: "1 New Street\nSydney NSW 2000", nextInvoiceNo: 8001 }));
+    const out = await inv.reviseInvoice(a.orgId, d.id, { ...PD6325, discount: null }, "Owner a");
+    expect(out).toMatchObject({ number: issued.number, status: "issued", totalCents: 24000 });
+    expect(out.snapshot!.studio.address).toBe("1 New Street\nSydney NSW 2000");
+    await expect(inv.reviseInvoice(a.orgId, d.id, { ...PD6325, lines: [] }, "x")).rejects.toThrow(/at least one line/);
+    await expect(inv.reviseInvoice(b.orgId, d.id, PD6325, "x")).rejects.toThrow(/not found/);
+
+    await inv.setInvoicePaid(a.orgId, d.id, true, "x");
+    await expect(inv.reviseInvoice(a.orgId, d.id, PD6325, "x")).rejects.toThrow(/is paid/);
+  });
+
   it("scopes everything by org", async () => {
     const client = await clients.createClient(a.orgId, { name: "Private Co" });
     const d = await inv.createInvoice(a.orgId, { clientId: client.id });

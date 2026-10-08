@@ -287,6 +287,31 @@ export async function issueInvoice(orgId: string, id: string, actorLabel: string
   });
 }
 
+/**
+ * Edits an issued, unpaid invoice in place: it keeps its number, the studio and the client are
+ * frozen again from the live settings, and the change is logged. Paid and void invoices stay locked.
+ */
+export async function reviseInvoice(orgId: string, id: string, raw: unknown, actorLabel: string): Promise<InvoiceRow> {
+  const input = draftInput.parse(raw);
+  const row = await getInvoice(orgId, id);
+  if (!row) throw new StudioError("That invoice was not found.");
+  if (row.status !== "issued") throw new StudioError(row.status === "draft" ? "A draft is saved, not revised." : `Invoice ${row.number} is ${row.status} and can't be changed. Duplicate it to make a new one.`);
+  if (input.lines.length === 0) throw new StudioError("An issued invoice needs at least one line.");
+  await checkProject(orgId, row.clientId, input.projectId);
+  const [studio, client] = await Promise.all([liveStudio(orgId), clientOf(orgId, row.clientId)]);
+  const totalCents = totalOf(input.lines, input.discount, studio.gstRegistered);
+  return db.transaction(async (tx) => {
+    const [out] = await tx
+      .update(schema.studioInvoices)
+      .set({ ...input, totalCents, snapshot: { studio, billTo: billToOf(client!) }, updatedAt: new Date() })
+      .where(and(eq(schema.studioInvoices.id, id), eq(schema.studioInvoices.status, "issued")))
+      .returning();
+    if (!out) throw new StudioError("That invoice changed meanwhile. Reload the page.");
+    await logEvent({ orgId, projectId: out.projectId, actorLabel, type: "invoice.revised", payload: { invoiceId: id, number: row.number, fromCents: row.totalCents, totalCents } }, tx);
+    return out;
+  });
+}
+
 export async function setInvoicePaid(orgId: string, id: string, paid: boolean, actorLabel: string): Promise<void> {
   const row = await getInvoice(orgId, id);
   if (!row) throw new StudioError("That invoice was not found.");

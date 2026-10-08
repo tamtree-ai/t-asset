@@ -19,6 +19,7 @@ export type EventType =
   | "reviewer.joined"
   | "share.opened"
   | "invoice.issued"
+  | "invoice.revised"
   | "invoice.paid"
   | "invoice.unpaid"
   | "invoice.voided";
@@ -68,6 +69,8 @@ export function describeEvent(e: { type: string; actorLabel: string; payload: Re
       return `${e.actorLabel} requested changes${where}`;
     case "invoice.issued":
       return `${e.actorLabel} issued invoice ${String(p.number)}`;
+    case "invoice.revised":
+      return `${e.actorLabel} edited invoice ${String(p.number)}`;
     case "invoice.paid":
       return `${e.actorLabel} marked invoice ${String(p.number)} paid`;
     case "invoice.unpaid":

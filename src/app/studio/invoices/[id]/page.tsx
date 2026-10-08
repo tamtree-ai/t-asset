@@ -15,8 +15,8 @@ import { listProjects } from "@/services/studio/projects";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Invoice" };
 
-export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function InvoicePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ edit?: string }> }) {
+  const [{ id }, { edit }] = await Promise.all([params, searchParams]);
   const member = await getCurrentMember();
   if (member.role !== "owner") notFound();
   const row = await getInvoice(member.orgId, id);
@@ -49,6 +49,27 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             billTo={doc.billTo}
             projects={projects.map((p) => ({ id: p.id, name: p.name }))}
             termsDays={settings.paymentTermsDays}
+          />
+        </Page>
+      </>
+    );
+  }
+
+  // Editing an issued invoice shows the live studio and client, since saving freezes them again.
+  if (row.status === "issued" && edit) {
+    const [projects, settings, live] = await Promise.all([listProjects(member.orgId, row.clientId), getInvoiceSettings(member.orgId), invoiceDoc(member.orgId, { ...row, snapshot: null })]);
+    return (
+      <>
+        <StudioHeader trail={[{ label: "Invoices", href: "/studio/invoices" }, { label: row.number!, href: `/studio/invoices/${row.id}` }, { label: "Edit" }]} />
+        <Page wide>
+          <Title sub={<>Issued to {client?.name} · keeps its number</>}>Edit {row.number}</Title>
+          <InvoiceEditor
+            draft={{ id: row.id, projectId: row.projectId, issueDate: row.issueDate, dueDate: row.dueDate, lines: row.lines, discount: row.discount, notes: row.notes }}
+            studio={live.studio}
+            billTo={live.billTo}
+            projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+            termsDays={settings.paymentTermsDays}
+            revise={{ number: row.number! }}
           />
         </Page>
       </>

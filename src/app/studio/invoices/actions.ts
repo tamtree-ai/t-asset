@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getCurrentMember } from "@/lib/auth";
 import { type ActionResult, guard, StudioError } from "@/lib/studio/errors";
-import { createInvoice, deleteDraft, duplicateInvoice, issueInvoice, saveInvoiceSettings, setInvoicePaid, updateDraft, voidInvoice } from "@/services/studio/invoices";
+import { createInvoice, deleteDraft, duplicateInvoice, issueInvoice, reviseInvoice, saveInvoiceSettings, setInvoicePaid, updateDraft, voidInvoice } from "@/services/studio/invoices";
 
 /** Invoices are money: the owner's alone, like the brand. */
 async function owner() {
@@ -41,6 +41,15 @@ export async function issueInvoiceAction(id: string, raw: unknown): Promise<Acti
     const row = await issueInvoice(m.orgId, id, m.label);
     touched();
     return { number: row.number! };
+  });
+}
+
+export async function reviseInvoiceAction(id: string, raw: unknown): Promise<ActionResult> {
+  return guard(async () => {
+    const m = await owner();
+    await reviseInvoice(m.orgId, id, raw, m.label);
+    touched();
+    return undefined;
   });
 }
 

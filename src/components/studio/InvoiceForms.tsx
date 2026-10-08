@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
-import { createInvoiceAction, deleteDraftAction, duplicateInvoiceAction, issueInvoiceAction, saveDraftAction, setPaidAction, voidInvoiceAction } from "@/app/studio/invoices/actions";
+import { createInvoiceAction, deleteDraftAction, duplicateInvoiceAction, issueInvoiceAction, reviseInvoiceAction, saveDraftAction, setPaidAction, voidInvoiceAction } from "@/app/studio/invoices/actions";
 import { addDays, computeTotals, type InvoiceBillTo, type InvoiceDiscount, type InvoiceDoc, InvoiceError, type InvoiceLine, type InvoiceStudio, invoiceWarnings, money, parseMoney, qtyLabel } from "@/lib/studio/invoice";
 import { renderInvoiceHtml } from "@/lib/studio/invoice-html";
 
@@ -119,8 +119,11 @@ type Draft = {
 const toText = (l: InvoiceLine): LineText => ({ description: l.description, detail: l.detail ?? "", qty: qtyLabel(l.qty), price: money(l.unitCents).replace(/,/g, "") });
 const blank: LineText = { description: "", detail: "", qty: "1", price: "" };
 
-/** Lines on the left, the page as the client will see it on the right. Nothing here has a number until it's issued. */
-export function InvoiceEditor({ draft, studio, billTo, projects, termsDays }: { draft: Draft; studio: InvoiceStudio; billTo: InvoiceBillTo; projects: Option[]; termsDays: number }) {
+/**
+ * Lines on the left, the page as the client will see it on the right. Nothing here has a number until it's issued.
+ * With `revise`, it edits an issued invoice in place: same number, saved straight back, no draft buttons.
+ */
+export function InvoiceEditor({ draft, studio, billTo, projects, termsDays, revise }: { draft: Draft; studio: InvoiceStudio; billTo: InvoiceBillTo; projects: Option[]; termsDays: number; revise?: { number: string } }) {
   const router = useRouter();
   const { run, error, pending } = useRunner();
   const [lines, setLines] = useState<LineText[]>(draft.lines.length ? draft.lines.map(toText) : [blank]);
@@ -168,14 +171,14 @@ export function InvoiceEditor({ draft, studio, billTo, projects, termsDays }: { 
   // The page as it would print, and anything that stops it adding up.
   const view = useMemo(() => {
     const p = parsed.payload;
-    const doc: InvoiceDoc = { number: null, issueDate: p.issueDate, dueDate: p.dueDate, billTo, lines: p.lines, discount: p.discount, notes: p.notes, studio, status: "draft" };
+    const doc: InvoiceDoc = { number: revise?.number ?? null, issueDate: p.issueDate, dueDate: p.dueDate, billTo, lines: p.lines, discount: p.discount, notes: p.notes, studio, status: revise ? "issued" : "draft" };
     try {
       const totals = computeTotals(doc.lines, doc.discount, studio.gstRegistered);
       return { totals, problem: null, warnings: invoiceWarnings(doc), html: renderInvoiceHtml(doc) };
     } catch (e) {
       return { totals: null, problem: e instanceof InvoiceError ? e.message : "These numbers don't add up.", warnings: invoiceWarnings(doc), html: null };
     }
-  }, [parsed, billTo, studio]);
+  }, [parsed, billTo, studio, revise]);
   const { totals, warnings, html } = view;
   const problem = parsed.problem ?? view.problem;
 
@@ -187,7 +190,10 @@ export function InvoiceEditor({ draft, studio, billTo, projects, termsDays }: { 
         onSubmit={(e) => {
           e.preventDefault();
           if (problem) return;
-          run(() => saveDraftAction(draft.id, parsed.payload), () => setSaved(true));
+          if (revise) {
+            if (parsed.payload.lines.length === 0) return;
+            run(() => reviseInvoiceAction(draft.id, parsed.payload), () => router.push(`/studio/invoices/${draft.id}`));
+          } else run(() => saveDraftAction(draft.id, parsed.payload), () => setSaved(true));
         }}
       >
         <section className={`${cardCls} flex flex-col gap-4 p-5`} aria-labelledby="lines">
@@ -320,27 +326,39 @@ export function InvoiceEditor({ draft, studio, billTo, projects, termsDays }: { 
         )}
 
         <FormError message={error} />
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="submit" disabled={pending || !!problem} className={quietBtn}>
-            Save draft
-          </button>
-          <button
-            type="button"
-            disabled={pending || !!problem || parsed.payload.lines.length === 0}
-            className={primaryBtn}
-            onClick={() => {
-              if (!window.confirm(`Issue this invoice for ${totals ? money(totals.totalCents, true) : ""}? It takes the next number and can't be edited afterwards.`)) return;
-              run(() => issueInvoiceAction(draft.id, parsed.payload));
-            }}
-          >
-            Issue invoice
-          </button>
-          {saved && <span className="text-[12.5px] text-fg-3">Saved.</span>}
-          <span className="flex-1" />
-          <ActionButton kind="danger" confirm="Delete this draft?" action={() => deleteDraftAction(draft.id)} onDone={() => router.push("/studio/invoices")}>
-            Delete draft
-          </ActionButton>
-        </div>
+        {revise ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="submit" disabled={pending || !!problem || parsed.payload.lines.length === 0} className={primaryBtn}>
+              Save changes to {revise.number}
+            </button>
+            <Link href={`/studio/invoices/${draft.id}`} className={quietBtn}>
+              Cancel
+            </Link>
+            <span className="text-[12.5px] text-fg-3">If the client already has it, send them the new PDF.</span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="submit" disabled={pending || !!problem} className={quietBtn}>
+              Save draft
+            </button>
+            <button
+              type="button"
+              disabled={pending || !!problem || parsed.payload.lines.length === 0}
+              className={primaryBtn}
+              onClick={() => {
+                if (!window.confirm(`Issue this invoice for ${totals ? money(totals.totalCents, true) : ""}? It takes the next number. You can still edit it until it's marked paid.`)) return;
+                run(() => issueInvoiceAction(draft.id, parsed.payload));
+              }}
+            >
+              Issue invoice
+            </button>
+            {saved && <span className="text-[12.5px] text-fg-3">Saved.</span>}
+            <span className="flex-1" />
+            <ActionButton kind="danger" confirm="Delete this draft?" action={() => deleteDraftAction(draft.id)} onDone={() => router.push("/studio/invoices")}>
+              Delete draft
+            </ActionButton>
+          </div>
+        )}
       </form>
 
       <aside aria-label="Preview" className="flex flex-col gap-2 lg:sticky lg:top-6 lg:self-start">
@@ -351,7 +369,7 @@ export function InvoiceEditor({ draft, studio, billTo, projects, termsDays }: { 
           <Link href="/settings/invoicing" className="underline hover:text-fg">
             Invoicing settings
           </Link>
-          , the billing address from the client. Issuing keeps a copy of both.
+          , the billing address from the client. {revise ? "Saving takes a fresh copy of both." : "Issuing keeps a copy of both."}
         </p>
       </aside>
     </div>
@@ -366,6 +384,11 @@ export function IssuedInvoiceActions({ id, status }: { id: string; status: "issu
       <a href={`/studio/invoices/${id}/document`} target="_blank" rel="noopener" className={primaryBtn}>
         Print or save as PDF
       </a>
+      {status === "issued" && (
+        <Link href={`/studio/invoices/${id}?edit=1`} className={quietBtn}>
+          Edit
+        </Link>
+      )}
       {status === "issued" && <ActionButton action={() => setPaidAction(id, true)}>Mark paid</ActionButton>}
       {status === "paid" && <ActionButton action={() => setPaidAction(id, false)}>Mark unpaid</ActionButton>}
       <ActionButton action={() => duplicateInvoiceAction(id).then((r) => (r.ok && router.push(`/studio/invoices/${r.data.id}`), r))}>Duplicate</ActionButton>

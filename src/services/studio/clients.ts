@@ -14,6 +14,7 @@ export const clientInput = z.object({
   name: z.string().trim().min(1, "Give the client a name.").max(80, "Keep the client name under 80 characters."),
   company: z.string().trim().max(80).optional().transform((s) => s || null),
   notes: z.string().max(4000, "Keep notes under 4000 characters.").default(""),
+  billingAddress: z.string().trim().max(300, "Keep the billing address under 300 characters.").optional().transform((s) => s || null),
   contacts: z
     .array(
       z.object({
@@ -91,6 +92,8 @@ export async function listClients(orgId: string, opts: { q?: string; archived?: 
 export async function deleteClient(orgId: string, id: string): Promise<void> {
   const client = await getClient(orgId, id);
   if (!client) throw new StudioError("That client was not found.");
+  const [inv] = await db.select({ id: schema.studioInvoices.id }).from(schema.studioInvoices).where(eq(schema.studioInvoices.clientId, id)).limit(1);
+  if (inv) throw new StudioError(`${client.name} has invoices, which are kept as records. Archive the client instead.`);
   const fileIds = await fileIdsUnder(orgId, { clientId: id });
   await db.delete(schema.studioClients).where(and(eq(schema.studioClients.id, id), eq(schema.studioClients.orgId, orgId)));
   await removeFiles(orgId, fileIds);

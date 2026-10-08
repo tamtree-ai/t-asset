@@ -51,11 +51,12 @@ export function NewClientForm() {
   );
 }
 
-export function ClientEditor({ client }: { client: { id: string; name: string; company: string | null; notes: string; contacts: Contact[]; archived: boolean } }) {
+export function ClientEditor({ client }: { client: { id: string; name: string; company: string | null; billingAddress: string | null; notes: string; contacts: Contact[]; archived: boolean } }) {
   const { run, error, pending } = useRunner();
   const [name, setName] = useState(client.name);
   const [company, setCompany] = useState(client.company ?? "");
   const [notes, setNotes] = useState(client.notes);
+  const [billingAddress, setBillingAddress] = useState(client.billingAddress ?? "");
   const [contacts, setContacts] = useState(contactsToText(client.contacts));
   const [saved, setSaved] = useState(false);
   return (
@@ -64,7 +65,7 @@ export function ClientEditor({ client }: { client: { id: string; name: string; c
       onSubmit={(e) => {
         e.preventDefault();
         setSaved(false);
-        run(() => updateClientAction(client.id, { name, company, notes, contacts: parseContacts(contacts) }), () => setSaved(true));
+        run(() => updateClientAction(client.id, { name, company, billingAddress, notes, contacts: parseContacts(contacts) }), () => setSaved(true));
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
@@ -77,6 +78,9 @@ export function ClientEditor({ client }: { client: { id: string; name: string; c
       </div>
       <Field label="Contacts" hint="One per line: Name · email · role">
         <textarea className={textareaCls} rows={3} value={contacts} onChange={(e) => setContacts(e.target.value)} placeholder="Sam Lee · sam@acme.com · Marketing" />
+      </Field>
+      <Field label="Billing address" hint="Printed under the name on invoices.">
+        <textarea className={textareaCls} rows={2} value={billingAddress} maxLength={300} onChange={(e) => setBillingAddress(e.target.value)} />
       </Field>
       <Field label="Notes (only you see these)">
         <textarea className={textareaCls} rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />

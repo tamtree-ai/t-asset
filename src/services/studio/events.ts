@@ -17,7 +17,11 @@ export type EventType =
   | "decision.approved"
   | "decision.changes_requested"
   | "reviewer.joined"
-  | "share.opened";
+  | "share.opened"
+  | "invoice.issued"
+  | "invoice.paid"
+  | "invoice.unpaid"
+  | "invoice.voided";
 
 type Db = Pick<typeof db, "insert">;
 
@@ -62,6 +66,14 @@ export function describeEvent(e: { type: string; actorLabel: string; payload: Re
       return `${e.actorLabel} approved${where}`;
     case "decision.changes_requested":
       return `${e.actorLabel} requested changes${where}`;
+    case "invoice.issued":
+      return `${e.actorLabel} issued invoice ${String(p.number)}`;
+    case "invoice.paid":
+      return `${e.actorLabel} marked invoice ${String(p.number)} paid`;
+    case "invoice.unpaid":
+      return `${e.actorLabel} marked invoice ${String(p.number)} unpaid`;
+    case "invoice.voided":
+      return `${e.actorLabel} voided invoice ${String(p.number)}`;
     case "reviewer.joined":
       return `${e.actorLabel} joined the review`;
     default:

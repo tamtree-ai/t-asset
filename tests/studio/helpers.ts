@@ -88,6 +88,7 @@ export async function setup(label: string) {
   async function cleanup() {
     // Versions point at files with no cascade, so the trees go first; then the orgs take everything else.
     if (orgIds.length) {
+      await db.delete(schema.studioInvoices).where(inArray(schema.studioInvoices.orgId, orgIds));
       await db.delete(schema.studioClients).where(inArray(schema.studioClients.orgId, orgIds));
       for (const id of orgIds) await db.delete(schema.orgs).where(eq(schema.orgs.id, id));
     }

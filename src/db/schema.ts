@@ -4,6 +4,8 @@
  * derived renditions and the metadata (plan §5.3).
  */
 import { sql } from "drizzle-orm";
+
+import type { InvoiceBillTo, InvoiceDiscount, InvoiceLine, InvoiceStudio } from "@/lib/studio/invoice";
 import {
   bigint,
   boolean,
@@ -120,6 +122,23 @@ export const studioBrand = pgTable("studio_brand", {
   roomTheme: studioRoomTheme("room_theme").notNull().default("light"),
   website: text("website"),
   supportEmail: text("support_email"),
+  // Invoicing (planning/2026-10-08-invoices). The name on an invoice is `legal_name`, else `studio_name`.
+  legalName: text("legal_name"),
+  abn: text("abn"),
+  address: text("address"),
+  gstRegistered: boolean("gst_registered").notNull().default(false),
+  paymentTermsDays: integer("payment_terms_days").notNull().default(30),
+  /** Null means the standard terms (DEFAULT_TERMS). */
+  invoiceTerms: text("invoice_terms"),
+  bankAccountName: text("bank_account_name"),
+  bankBsb: text("bank_bsb"),
+  bankAccountNo: text("bank_account_no"),
+  payByPost: boolean("pay_by_post").notNull().default(true),
+  invoicePrefix: text("invoice_prefix").notNull().default("PD"),
+  /** The number the next issued invoice takes; issuing increments it in the same transaction. */
+  nextInvoiceNo: integer("next_invoice_no").notNull().default(1),
+  /** A small data: URL (PNG, JPEG, WebP or SVG), so a logo needs no Blob file or Tamtree step. */
+  invoiceLogo: text("invoice_logo"),
   updatedAt: updatedAt(),
 });
 
@@ -132,6 +151,7 @@ export const studioClients = pgTable(
     company: text("company"),
     contacts: jsonb("contacts").$type<{ name: string; email: string; role?: string }[]>().notNull().default([]),
     notes: text("notes").notNull().default(""),
+    billingAddress: text("billing_address"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -354,4 +374,44 @@ export const studioRateLimits = pgTable(
     count: integer("count").notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.bucket, t.key, t.windowStart] })],
+);
+
+// ── Invoices ───────────────────────────────────────────────────────────────
+// planning/2026-10-08-invoices. A draft reads the studio and client live; issuing assigns the
+// number and freezes both into `snapshot`, so a later change (a new address) leaves it as sent.
+
+export const studioInvoiceStatus = pgEnum("studio_invoice_status", ["draft", "issued", "paid", "void"]);
+
+export const studioInvoices = pgTable(
+  "studio_invoices",
+  {
+    id: id(),
+    orgId: uuid("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+    /** No action (checked at the end of the statement, so an org delete still cascades): a client with invoices is archived, not deleted. */
+    clientId: uuid("client_id").notNull().references(() => studioClients.id, { onDelete: "no action" }),
+    projectId: uuid("project_id").references(() => studioProjects.id, { onDelete: "set null" }),
+    /** Null while a draft. */
+    number: text("number"),
+    status: studioInvoiceStatus("status").notNull().default("draft"),
+    issueDate: text("issue_date").notNull(),
+    dueDate: text("due_date").notNull(),
+    /** Always at full price; cents. */
+    lines: jsonb("lines").$type<InvoiceLine[]>().notNull().default([]),
+    discount: jsonb("discount").$type<InvoiceDiscount>(),
+    notes: text("notes").notNull().default(""),
+    /** Kept in step with the lines, for the list. */
+    totalCents: integer("total_cents").notNull().default(0),
+    snapshot: jsonb("snapshot").$type<{ studio: InvoiceStudio; billTo: InvoiceBillTo } | null>(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("studio_invoices_org").on(t.orgId, t.createdAt),
+    index("studio_invoices_client").on(t.clientId),
+    uniqueIndex("studio_invoices_org_number").on(t.orgId, t.number),
+    check("studio_invoices_number_when_issued", sql`${t.status} = 'draft' or (${t.number} is not null and ${t.snapshot} is not null)`),
+  ],
 );

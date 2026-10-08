@@ -7,7 +7,7 @@ import { bytesLabel } from "@/lib/studio/format";
 import { studioMember } from "@/lib/studio/member";
 import { storageUsed } from "@/services/studio/storage";
 
-/** The studio's top bar: breadcrumbs, the storage meter (plan §5.6), Brand and Sign out. */
+/** The studio's top bar: breadcrumbs, the storage meter (plan §5.6), Invoices, Brand and Sign out. */
 export async function StudioHeader({ trail, trailing }: { trail: Crumb[]; trailing?: ReactNode }) {
   const member = await studioMember();
   const used = await storageUsed(member.orgId);
@@ -27,6 +27,11 @@ export async function StudioHeader({ trail, trailing }: { trail: Crumb[]; traili
               {bytesLabel(used.bytes)} of {bytesLabel(used.capBytes)}
             </span>
           </span>
+          {member.role === "owner" && (
+            <Link href="/studio/invoices" className="rounded-md px-2 py-1 text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
+              Invoices
+            </Link>
+          )}
           <Link href="/settings/brand" className="rounded-md px-2 py-1 text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
             Brand
           </Link>

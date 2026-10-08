@@ -38,7 +38,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           </Title>
           <div className="flex items-center gap-2.5">
             <StatusLine status={overview.status} />
-            <ProjectActions projectId={id} canShare={assets.some((a) => a.latest)} />
+            <ProjectActions projectId={id} canShare={assets.some((a) => a.latest)} invoiceFor={member.role === "owner" ? client.id : undefined} />
           </div>
         </div>
 

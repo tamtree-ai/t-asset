@@ -32,7 +32,7 @@ export async function setup(label: string) {
     return { orgId: o!.id, memberId: member!.id, email: member!.email };
   }
 
-  async function tree(orgId: string, kind: "image" | "video" = "image", names: { client?: string; project?: string; asset?: string } = {}) {
+  async function tree(orgId: string, kind: "image" | "video" | "document" = "image", names: { client?: string; project?: string; asset?: string } = {}) {
     const [client] = await db.insert(schema.studioClients).values({ orgId, name: names.client ?? "Acme" }).returning();
     const [project] = await db.insert(schema.studioProjects).values({ orgId, clientId: client!.id, name: names.project ?? "Spring", roundsIncluded: 2 }).returning();
     const [asset] = await db.insert(schema.studioAssets).values({ projectId: project!.id, title: names.asset ?? "Banner", kind }).returning();

@@ -99,7 +99,7 @@ export async function deleteClient(orgId: string, id: string): Promise<void> {
   await removeFiles(orgId, fileIds);
 }
 
-/** File ids of every version below a client or a project: collected before the delete, because versions point at files without a cascade. */
+/** File ids of every version below a client or a project, and of their deliverables: collected before the delete, because versions point at files without a cascade. */
 export async function fileIdsUnder(orgId: string, scope: { clientId?: string; projectId?: string; assetId?: string; variationId?: string; versionId?: string }): Promise<string[]> {
   const conds = [eq(schema.studioProjects.orgId, orgId)];
   if (scope.clientId) conds.push(eq(schema.studioProjects.clientId, scope.clientId));
@@ -108,11 +108,12 @@ export async function fileIdsUnder(orgId: string, scope: { clientId?: string; pr
   if (scope.variationId) conds.push(eq(schema.studioVariations.id, scope.variationId));
   if (scope.versionId) conds.push(eq(schema.studioVersions.id, scope.versionId));
   const rows = await db
-    .select({ fileId: schema.studioVersions.fileId })
+    .select({ fileId: schema.studioVersions.fileId, deliverable: schema.studioVersionFiles.fileId })
     .from(schema.studioVersions)
     .innerJoin(schema.studioVariations, eq(schema.studioVariations.id, schema.studioVersions.variationId))
     .innerJoin(schema.studioAssets, eq(schema.studioAssets.id, schema.studioVariations.assetId))
     .innerJoin(schema.studioProjects, eq(schema.studioProjects.id, schema.studioAssets.projectId))
+    .leftJoin(schema.studioVersionFiles, eq(schema.studioVersionFiles.versionId, schema.studioVersions.id))
     .where(and(...conds));
-  return rows.map((r) => r.fileId);
+  return [...new Set(rows.flatMap((r) => (r.deliverable ? [r.fileId, r.deliverable] : [r.fileId])))];
 }

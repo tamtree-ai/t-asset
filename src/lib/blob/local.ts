@@ -86,6 +86,12 @@ export class LocalBlobStore implements BlobStore {
     }
   }
 
+  async readStart(key: string, bytes: number): Promise<Uint8Array> {
+    const chunks: Buffer[] = [];
+    for await (const c of createReadStream(this.localPath(key), { start: 0, end: Math.max(bytes - 1, 0) })) chunks.push(c as Buffer);
+    return new Uint8Array(Buffer.concat(chunks));
+  }
+
   async delete(keys: string[]): Promise<void> {
     for (const key of keys) {
       const file = this.localPath(key);

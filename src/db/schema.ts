@@ -63,11 +63,11 @@ export const sessions = pgTable("sessions", {
 
 export const studioRoomTheme = pgEnum("studio_room_theme", ["light", "dark", "auto"]);
 export const studioProjectStatus = pgEnum("studio_project_status", ["active", "paused", "delivered"]);
-export const studioAssetKind = pgEnum("studio_asset_kind", ["image", "video"]);
+export const studioAssetKind = pgEnum("studio_asset_kind", ["image", "video", "document"]);
 export const studioVersionStatus = pgEnum("studio_version_status", ["in_review", "changes_requested", "approved"]);
 /** `uploading`: the browser is still sending the original. `pending`: Tamtree is making the renditions. */
 export const studioProcessing = pgEnum("studio_processing", ["uploading", "pending", "ready", "failed"]);
-export const studioDownloadPolicy = pgEnum("studio_download_policy", ["none", "after_approval", "always"]);
+export const studioDownloadPolicy = pgEnum("studio_download_policy", ["none", "after_approval", "always", "after_payment"]);
 export const studioVersionMode = pgEnum("studio_version_mode", ["latest", "pinned"]);
 export const studioDecisionKind = pgEnum("studio_decision", ["approved", "changes_requested"]);
 
@@ -93,6 +93,8 @@ export const studioFiles = pgTable(
     /** Frame rate as ffprobe reports it (30000/1001 stays exact). */
     fpsNum: integer("fps_num"),
     fpsDen: integer("fps_den"),
+    /** Documents only: pages in the PDF (and in its proofs). */
+    pageCount: integer("page_count"),
     previewKey: text("preview_key"),
     thumbKey: text("thumb_key"),
     posterKey: text("poster_key"),
@@ -238,6 +240,8 @@ export const studioShares = pgTable(
     passcodeEnc: text("passcode_enc").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     downloadPolicy: studioDownloadPolicy("download_policy").notNull().default("after_approval"),
+    /** The invoice whose payment unlocks downloads under `after_payment`; must be for this project's client. */
+    invoiceId: uuid("invoice_id").references((): AnyPgColumn => studioInvoices.id, { onDelete: "set null" }),
     watermark: boolean("watermark").notNull().default(true),
     commentsOpen: boolean("comments_open").notNull().default(true),
     versionMode: studioVersionMode("version_mode").notNull().default("latest"),
@@ -247,6 +251,24 @@ export const studioShares = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index("studio_shares_project").on(t.projectId)],
+);
+
+/**
+ * The deliverables of a version (planning/2026-10-31-tasset-deliverables): the SVG, AI, EPS, PDF or
+ * ZIP files a client takes away. Never shown in the room, only listed and downloaded under the
+ * share's download rules.
+ */
+export const studioVersionFiles = pgTable(
+  "studio_version_files",
+  {
+    id: id(),
+    versionId: uuid("version_id").notNull().references(() => studioVersions.id, { onDelete: "cascade" }),
+    fileId: uuid("file_id").notNull().references(() => studioFiles.id),
+    label: text("label").notNull(),
+    sort: integer("sort").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("studio_version_files_version_file").on(t.versionId, t.fileId), index("studio_version_files_file").on(t.fileId)],
 );
 
 export const studioShareItems = pgTable(

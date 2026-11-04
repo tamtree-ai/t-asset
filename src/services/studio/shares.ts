@@ -16,7 +16,8 @@ import { getProject } from "./projects";
 
 export type ShareRow = typeof schema.studioShares.$inferSelect;
 
-export const shareInput = z.object({
+export const shareInput = z
+  .object({
   title: z.string().trim().min(1, "Give the review a title.").max(120, "Keep the title under 120 characters."),
   message: z.string().max(4000, "Keep the message under 4000 characters.").default(""),
   notes: z
@@ -30,12 +31,16 @@ export const shareInput = z.object({
     .nullable()
     .transform((s) => (s ? new Date(s) : null))
     .refine((d) => d === null || !Number.isNaN(d.getTime()), "The expiry date doesn't look right."),
-  downloadPolicy: z.enum(["none", "after_approval", "always"]),
+  downloadPolicy: z.enum(["none", "after_approval", "always", "after_payment"]),
+  /** The invoice whose payment unlocks downloads; only kept under `after_payment`. */
+  invoiceId: z.string().uuid().nullable().optional(),
   watermark: z.boolean(),
   commentsOpen: z.boolean(),
   versionMode: z.enum(["latest", "pinned"]),
   assetIds: z.array(z.string().uuid()).min(1, "Pick at least one asset to share.").max(50),
-});
+  })
+  .refine((s) => s.downloadPolicy !== "after_payment" || !!s.invoiceId, { message: "Pick the invoice whose payment unlocks the files.", path: ["invoiceId"] })
+  .transform((s) => ({ ...s, invoiceId: s.downloadPolicy === "after_payment" ? s.invoiceId! : null }));
 
 export type ShareInput = z.input<typeof shareInput>;
 
@@ -52,6 +57,29 @@ async function assertAssets(orgId: string, projectId: string, assetIds: string[]
     .innerJoin(schema.studioProjects, eq(schema.studioProjects.id, schema.studioAssets.projectId))
     .where(and(inArray(schema.studioAssets.id, assetIds), eq(schema.studioAssets.projectId, projectId), eq(schema.studioProjects.orgId, orgId)));
   if (rows.length !== new Set(assetIds).size) throw new StudioError("One of those assets isn't in this project.");
+}
+
+/** An `after_payment` share's invoice must be this org's, for the project's client, and issued (or already paid). */
+async function assertInvoice(orgId: string, projectId: string, invoiceId: string | null) {
+  if (!invoiceId) return;
+  const [row] = await db
+    .select({ status: schema.studioInvoices.status })
+    .from(schema.studioInvoices)
+    .innerJoin(schema.studioProjects, eq(schema.studioProjects.clientId, schema.studioInvoices.clientId))
+    .where(and(eq(schema.studioInvoices.id, invoiceId), eq(schema.studioInvoices.orgId, orgId), eq(schema.studioProjects.id, projectId)))
+    .limit(1);
+  if (!row) throw new StudioError("That invoice isn't for this client.");
+  if (row.status !== "issued" && row.status !== "paid") throw new StudioError(row.status === "draft" ? "Issue the invoice first: a draft can't unlock files." : "That invoice is void, so it can never unlock the files. Pick another.");
+}
+
+/** The invoices a share for this project can wait on: the client's issued and paid ones, newest first. */
+export async function unlockInvoices(orgId: string, projectId: string) {
+  return db
+    .select({ id: schema.studioInvoices.id, number: schema.studioInvoices.number, status: schema.studioInvoices.status, totalCents: schema.studioInvoices.totalCents, issueDate: schema.studioInvoices.issueDate })
+    .from(schema.studioInvoices)
+    .innerJoin(schema.studioProjects, eq(schema.studioProjects.clientId, schema.studioInvoices.clientId))
+    .where(and(eq(schema.studioInvoices.orgId, orgId), eq(schema.studioProjects.id, projectId), inArray(schema.studioInvoices.status, ["issued", "paid"])))
+    .orderBy(desc(schema.studioInvoices.issuedAt));
 }
 
 /** For `pinned` mode: each asset's newest version at the moment the share is made, one per variation. */
@@ -76,6 +104,7 @@ export async function createShare(orgId: string, memberId: string, projectId: st
   const input = shareInput.parse(raw);
   if (!(await getProject(orgId, projectId))) throw new StudioError("That project was not found.");
   await assertAssets(orgId, projectId, input.assetIds);
+  await assertInvoice(orgId, projectId, input.invoiceId);
   const token = newToken(24);
   const passcode = newPasscode();
   const pins = input.versionMode === "pinned" ? await pinNow(input.assetIds) : new Map<string, string[]>();
@@ -93,6 +122,7 @@ export async function createShare(orgId: string, memberId: string, projectId: st
         passcodeEnc: encrypt(passcode),
         expiresAt: input.expiresAt,
         downloadPolicy: input.downloadPolicy,
+        invoiceId: input.invoiceId,
         watermark: input.watermark,
         commentsOpen: input.commentsOpen,
         versionMode: input.versionMode,
@@ -111,6 +141,8 @@ export async function updateShare(orgId: string, shareId: string, raw: ShareInpu
   const existing = await getShare(orgId, shareId);
   if (!existing) throw new StudioError("That review link was not found.");
   await assertAssets(orgId, existing.share.projectId, input.assetIds);
+  // An unchanged invoice that has since been voided is kept as it is: the link just stays locked.
+  if (input.invoiceId !== existing.share.invoiceId) await assertInvoice(orgId, existing.share.projectId, input.invoiceId);
   const keepPins = new Map(existing.items.map((i) => [i.assetId, i.pinnedVersionIds]));
   const fresh = input.versionMode === "pinned" ? await pinNow(input.assetIds.filter((a) => !keepPins.get(a)?.length)) : new Map<string, string[]>();
   await db.transaction(async (tx) => {
@@ -122,6 +154,7 @@ export async function updateShare(orgId: string, shareId: string, raw: ShareInpu
         notes: input.notes,
         expiresAt: input.expiresAt,
         downloadPolicy: input.downloadPolicy,
+        invoiceId: input.invoiceId,
         watermark: input.watermark,
         commentsOpen: input.commentsOpen,
         versionMode: input.versionMode,

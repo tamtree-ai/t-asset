@@ -22,7 +22,8 @@ export type EventType =
   | "invoice.revised"
   | "invoice.paid"
   | "invoice.unpaid"
-  | "invoice.voided";
+  | "invoice.voided"
+  | "file.downloaded";
 
 type Db = Pick<typeof db, "insert">;
 
@@ -77,6 +78,8 @@ export function describeEvent(e: { type: string; actorLabel: string; payload: Re
       return `${e.actorLabel} marked invoice ${String(p.number)} unpaid`;
     case "invoice.voided":
       return `${e.actorLabel} voided invoice ${String(p.number)}`;
+    case "file.downloaded":
+      return `${e.actorLabel} downloaded ${typeof p.label === "string" && p.label ? `“${p.label}”` : typeof p.file === "string" ? p.file : "a file"}${where}`;
     case "reviewer.joined":
       return `${e.actorLabel} joined the review`;
     default:

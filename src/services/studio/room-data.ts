@@ -7,6 +7,7 @@ import { db, schema } from "@/db";
 import type { RoomAssetView } from "@/lib/studio/room-types";
 
 import type { ShareRow } from "./access";
+import type { Deliverable } from "./deliverables";
 import { canDownloadOriginal, findVersion, type RoomAsset, watermarked } from "./room";
 
 export async function latestSignoffs(versionIds: string[]) {
@@ -17,7 +18,14 @@ export async function latestSignoffs(versionIds: string[]) {
   return out;
 }
 
-export function toView(share: Pick<ShareRow, "watermark" | "downloadPolicy">, content: RoomAsset[], signoffs: Awaited<ReturnType<typeof latestSignoffs>>): RoomAssetView[] {
+/** `paid`: the share's invoice is paid (only read for `after_payment`). */
+export function toView(
+  share: Pick<ShareRow, "watermark" | "downloadPolicy">,
+  content: RoomAsset[],
+  signoffs: Awaited<ReturnType<typeof latestSignoffs>>,
+  extra: { deliverables?: Deliverable[]; paid?: boolean } = {},
+): RoomAssetView[] {
+  const paid = !!extra.paid;
   return content.map((a) => ({
     id: a.id,
     title: a.title,
@@ -31,11 +39,12 @@ export function toView(share: Pick<ShareRow, "watermark" | "downloadPolicy">, co
         status: x.status,
         changeNote: x.changeNote,
         createdAt: x.createdAt.toISOString(),
-        file: { id: x.file.id, mime: x.file.mime, width: x.file.width, height: x.file.height, durationS: x.file.durationS, fpsNum: x.file.fpsNum, fpsDen: x.file.fpsDen, processing: x.file.processing, bytes: x.file.bytes, originalName: x.file.originalName },
-        marked: watermarked(share, x.status),
-        canDownload: canDownloadOriginal(share, x.status),
+        file: { id: x.file.id, mime: x.file.mime, width: x.file.width, height: x.file.height, durationS: x.file.durationS, fpsNum: x.file.fpsNum, fpsDen: x.file.fpsDen, processing: x.file.processing, bytes: x.file.bytes, originalName: x.file.originalName, pageCount: x.file.pageCount },
+        marked: watermarked(share, x.status, paid),
+        canDownload: canDownloadOriginal(share, x.status, paid),
         latest: i === v.versions.length - 1,
         signoff: signoffs.get(x.id) ?? null,
+        deliverables: (extra.deliverables ?? []).filter((d) => d.versionId === x.id).map((d) => ({ fileId: d.fileId, label: d.label, name: d.name, ext: d.ext, bytes: d.bytes })),
       })),
     })),
   }));

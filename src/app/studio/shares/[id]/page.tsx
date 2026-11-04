@@ -9,7 +9,7 @@ import { getBrand } from "@/services/studio/brand";
 import { getClient } from "@/services/studio/clients";
 import { describeEvent, listEvents } from "@/services/studio/events";
 import { projectOverview } from "@/services/studio/projects";
-import { getShare, listReviewers, shareState } from "@/services/studio/shares";
+import { getShare, listReviewers, shareState, unlockInvoices } from "@/services/studio/shares";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
   const found = await getShare(member.orgId, id);
   if (!found) notFound();
   const { share, items } = found;
-  const [overview, brand, reviewers, events] = await Promise.all([projectOverview(member.orgId, share.projectId), getBrand(member.orgId), listReviewers(member.orgId, id), listEvents(member.orgId, { shareId: id }, 30)]);
+  const [overview, brand, reviewers, events, invoices] = await Promise.all([projectOverview(member.orgId, share.projectId), getBrand(member.orgId), listReviewers(member.orgId, id), listEvents(member.orgId, { shareId: id }, 30), unlockInvoices(member.orgId, share.projectId)]);
   if (!overview) notFound();
   const client = (await getClient(member.orgId, overview.project.clientId))!;
   const picked = new Set(items.map((i) => i.assetId));
@@ -65,12 +65,14 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
             projectId={share.projectId}
             shareId={id}
             assets={overview.assets.map((a) => ({ id: a.id, title: a.title, kind: a.kind, hasVersion: !!a.latest }))}
+            invoices={invoices}
             initial={{
               title: share.title,
               message: share.message,
               notes: share.notes,
               expiresAt: share.expiresAt ? share.expiresAt.toISOString().slice(0, 10) : "",
               downloadPolicy: share.downloadPolicy,
+              invoiceId: share.invoiceId,
               watermark: share.watermark,
               commentsOpen: share.commentsOpen,
               versionMode: share.versionMode,

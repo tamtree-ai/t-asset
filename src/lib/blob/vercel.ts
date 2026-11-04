@@ -68,6 +68,12 @@ export class VercelBlobStore implements BlobStore {
     }
   }
 
+  async readStart(key: string, bytes: number): Promise<Uint8Array> {
+    const res = await fetch(await this.readUrl(key, { validForS: 60 }), { headers: { range: `bytes=0-${Math.max(bytes - 1, 0)}` } });
+    if (!res.ok) throw new Error(`Reading the start of ${key} failed (${res.status}).`);
+    return new Uint8Array(await res.arrayBuffer()).slice(0, bytes);
+  }
+
   async delete(keys: string[]): Promise<void> {
     if (keys.length) await del(keys);
   }

@@ -6,15 +6,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Annotation } from "@/lib/studio/annotation";
 import { counts } from "@/lib/studio/comment-filter";
 import { seekTarget } from "@/lib/studio/pins";
+import { canDownloadOriginal, lockNote, watermarked } from "@/lib/studio/policy";
 import { BrandMark } from "./BrandMark";
 import { CommentRail } from "./CommentRail";
 import { Composer } from "./Composer";
 import { CoverNote } from "./CoverNote";
 import { DecisionBar } from "./DecisionBar";
+import { DocumentStage, PageBar } from "./DocumentStage";
+import { FileList } from "./FileList";
 import { ImageStage } from "./ImageStage";
 import { ShortcutHelp } from "./ShortcutHelp";
 import { IconChevron, IconClose, IconComment, IconCompare, IconDownload, IconExpand, IconKeyboard, IconPanel, IconShrink } from "./icons";
-import { fileUrl, type CommentView, type Placement, type ReviewApi, type RoomAssetView, type StageHandle, type VersionStatus } from "./types";
+import { deliverableUrl, type DownloadPolicy, fileUrl, type CommentView, type Placement, type ReviewApi, type RoomAssetView, type StageHandle, type VersionStatus } from "./types";
 import { VideoStage } from "./VideoStage";
 
 const POLL_MS = 10_000;
@@ -33,7 +36,9 @@ type Props = {
   clientName?: string | null;
   rounds?: { label: string; over: boolean; note: string | null } | null;
   cover?: { key: string; message: string; notes: string[] } | null;
-  downloadPolicy: "none" | "after_approval" | "always";
+  downloadPolicy: DownloadPolicy;
+  /** `after_payment` shares: the invoice that unlocks the files, and whether it is paid. */
+  invoice?: { number: string | null; paid: boolean } | null;
   /** The owner's page already has its own header and sits in a shorter frame. */
   embedded?: boolean;
   /** The owner's page has its own option tabs and version list; the room doesn't repeat them. */
@@ -55,6 +60,9 @@ export function Workspace(p: Props) {
   const [panel, setPanel] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // A deep link to a comment on a document opens on that comment's page.
+  const [page, setPage] = useState(() => p.initialThreads.find((t) => t.id === p.initial.commentId)?.annotation?.page ?? 1);
+  const [pages, setPages] = useState<number | null>(null);
   const stage = useRef<StageHandle>(null);
   const composerBox = useRef<HTMLTextAreaElement>(null);
 
@@ -62,11 +70,15 @@ export function Workspace(p: Props) {
   const variation = asset.variations.find((v) => v.id === sel.variationId) ?? asset.variations[0]!;
   const version = variation.versions.find((v) => v.id === sel.versionId) ?? variation.versions[variation.versions.length - 1]!;
   const isVideo = asset.kind === "video";
+  const isDocument = asset.kind === "document";
+  const pageCount = pages ?? version.file.pageCount ?? 1;
   const ready = version.file.processing === "ready";
   const fpsNum = version.file.fpsNum;
   const fpsDen = version.file.fpsDen;
   const fps = useMemo(() => (fpsNum && fpsDen ? { num: fpsNum, den: fpsDen } : null), [fpsNum, fpsDen]);
   const c = counts(threads);
+  // A document draws the pins of the page on screen; the rail lists every comment, each saying its page.
+  const shownThreads = useMemo(() => (isDocument ? threads.filter((t) => !t.annotation || t.annotation.page === undefined || t.annotation.page === page) : threads), [threads, isDocument, page]);
   const highlighted = hoverId ?? activeId;
 
   useEffect(() => {
@@ -120,16 +132,23 @@ export function Workspace(p: Props) {
           stage.current?.pause();
           stage.current?.seek(at);
         }
+      } else if (isDocument && a.page !== undefined && a.page !== page) {
+        // On another page: `activate` turns to it; the image stage there starts at fit.
       } else if (a.shape !== "time") stage.current?.focus(a.shape === "rect" ? a.x + (a.w ?? 0) / 2 : a.x, a.shape === "rect" ? a.y + (a.h ?? 0) / 2 : a.y);
     },
-    [threads, isVideo],
+    [threads, isVideo, isDocument, page],
   );
   const activate = useCallback(
     (id: string) => {
       setActiveId(id);
+      const onPage = threads.find((x) => x.id === id)?.annotation?.page;
+      if (isDocument && onPage !== undefined && onPage !== page) {
+        setPage(onPage);
+        setDraft(null);
+      }
       pointAt(id);
     },
-    [pointAt],
+    [pointAt, threads, isDocument, page],
   );
 
   // A deep link from an email lands on its comment.
@@ -140,12 +159,15 @@ export function Workspace(p: Props) {
     if (threads.some((t) => t.id === p.initial.commentId)) pointAt(p.initial.commentId);
   }, [threads, pointAt, p.initial.commentId]);
 
-  const place = useCallback((pl: Placement) => {
-    setDraft({ v: 1, ...pl } as Annotation);
+  const place = useCallback(
+    (pl: Placement) => {
+      setDraft({ v: 1, ...pl, ...(isDocument ? { page } : {}) } as Annotation);
     setMode("browse");
     setSheet(true);
-    setTimeout(() => composerBox.current?.focus(), 30);
-  }, []);
+      setTimeout(() => composerBox.current?.focus(), 30);
+    },
+    [isDocument, page],
+  );
 
   const setOut = useCallback(() => {
     setDraft((d) => {
@@ -160,6 +182,19 @@ export function Workspace(p: Props) {
     setMode((m) => (m === "comment" ? "browse" : "comment"));
     stage.current?.pause();
   }, [p.commentsOpen, ready]);
+
+  /** A placed pin belongs to its page, so turning the page drops it. */
+  const turnPage = useCallback(
+    (by: number) => {
+      setPage((n) => {
+        const next = Math.min(Math.max(n + by, 1), pageCount);
+        if (next !== n) setDraft(null);
+        return next;
+      });
+    },
+    [pageCount],
+  );
+  const goPage = (n: number) => turnPage(n - page);
 
   // Keyboard (plan §3). Never while typing in a field or a dialog.
   useEffect(() => {
@@ -197,8 +232,16 @@ export function Workspace(p: Props) {
         case "j":
           if (isVideo) h?.seek(Math.max(0, (h?.time() ?? 0) - 1));
           break;
+        case "pageup":
+        case "pagedown":
+          if (isDocument) {
+            e.preventDefault();
+            turnPage(k === "pageup" ? -1 : 1);
+          }
+          break;
         case ",":
         case "arrowleft":
+          if (isDocument && k === "arrowleft") turnPage(-1);
           if (isVideo) {
             e.preventDefault();
             h?.step(e.shiftKey ? -10 : -1);
@@ -206,6 +249,7 @@ export function Workspace(p: Props) {
           break;
         case ".":
         case "arrowright":
+          if (isDocument && k === "arrowright") turnPage(1);
           if (isVideo) {
             e.preventDefault();
             h?.step(e.shiftKey ? 10 : 1);
@@ -228,7 +272,7 @@ export function Workspace(p: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, isVideo, startComment, setOut]);
+  }, [mode, isVideo, isDocument, startComment, setOut, turnPage]);
 
   const apply = async (fn: () => Promise<{ ok: true; data: CommentView[] } | { ok: false; error: string }>): Promise<string | null> => {
     const r = await fn();
@@ -270,7 +314,7 @@ export function Workspace(p: Props) {
         ...a,
         variations: a.variations.map((v) => ({
           ...v,
-          versions: v.versions.map((x) => (x.id === version.id ? { ...x, status, marked: x.marked && status !== "approved", canDownload: p.downloadPolicy === "always" || (p.downloadPolicy === "after_approval" && status === "approved"), signoff: { decision, name: input.signedName || p.viewerName || "You", at: now } } : x)),
+          versions: v.versions.map((x) => (x.id === version.id ? { ...x, status, marked: x.marked && watermarked({ watermark: true, downloadPolicy: p.downloadPolicy }, status, !!p.invoice?.paid), canDownload: canDownloadOriginal({ downloadPolicy: p.downloadPolicy }, status, !!p.invoice?.paid), signoff: { decision, name: input.signedName || p.viewerName || "You", at: now } } : x)),
         })),
       })),
     );
@@ -285,6 +329,8 @@ export function Workspace(p: Props) {
     setMode("browse");
     setActiveId(null);
     setThreads([]);
+    setPage(1);
+    setPages(null);
     void load(next.versionId, false);
   };
   const goVersion = (versionId: string) => switchTo({ ...sel, assetId: asset.id, variationId: variation.id, versionId });
@@ -301,8 +347,8 @@ export function Workspace(p: Props) {
 
   const src = fileUrl(audience, token, version.file.id, "preview");
   const download = version.canDownload ? fileUrl(audience, token, version.file.id, "original", true) : null;
-  const downloadNote = p.downloadPolicy === "after_approval" ? "Clean download unlocks when you approve." : null;
-  const compareHref = token && (variation.versions.length > 1 || (asset.kind === "image" && asset.variations.length > 1)) ? `/review/${token}/compare?asset=${asset.id}&b=${version.id}` : null;
+  const downloadNote = audience === "client" ? lockNote(p.downloadPolicy, version.status, p.invoice ?? null) : null;
+  const compareHref = token && (variation.versions.length > 1 || (asset.kind !== "video" && asset.variations.length > 1)) ? `/review/${token}/compare?asset=${asset.id}&b=${version.id}` : null;
   const disabledReason = !p.commentsOpen ? "Comments are paused on this review." : !ready ? "Comments open once this file has finished processing." : null;
 
   const showPanel = panel || sheet;
@@ -401,7 +447,12 @@ export function Workspace(p: Props) {
         </div>
 
         {/* The comment tool: one obvious action, floating where the eye already is. */}
-        <div className={`pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3 ${isVideo ? "bottom-[118px]" : "bottom-5"}`}>
+        {isDocument && ready && pageCount > 1 && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-3">
+            <PageBar page={page} pages={pageCount} onPage={goPage} />
+          </div>
+        )}
+        <div className={`pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3 ${isVideo ? "bottom-[118px]" : isDocument && pageCount > 1 ? "bottom-[68px]" : "bottom-5"}`}>
           <div className="pointer-events-auto glass flex items-center gap-2 rounded-full p-1 pr-1.5">
             <button
               type="button"
@@ -435,6 +486,22 @@ export function Workspace(p: Props) {
             height={version.file.height ?? 1080}
             fps={fps}
             threads={threads}
+            activeId={highlighted}
+            onActivate={activate}
+            onHover={setHoverId}
+            draft={draft}
+            capturing={mode === "comment"}
+            onPlace={place}
+            handle={stage}
+          />
+        ) : isDocument ? (
+          <DocumentStage
+            key={version.id}
+            src={src}
+            alt={`${asset.title}, ${variation.label}, version ${version.number}`}
+            page={page}
+            onPages={setPages}
+            threads={shownThreads}
             activeId={highlighted}
             onActivate={activate}
             onHover={setHoverId}
@@ -497,7 +564,7 @@ export function Workspace(p: Props) {
           </header>
         )}
 
-        {(p.cover || version.changeNote.trim()) && (
+        {(p.cover || version.changeNote.trim() || version.deliverables.length > 0) && (
           <div className="flex flex-col gap-2 px-4 pb-3">
             {p.cover && <CoverNote shareKey={p.cover.key} studioName={p.brand.studioName} message={p.cover.message} notes={p.cover.notes} />}
             {version.changeNote.trim() && (
@@ -505,6 +572,7 @@ export function Workspace(p: Props) {
                 <span className="font-semibold text-room-fg">What changed in v{version.number}:</span> {version.changeNote}
               </div>
             )}
+            <FileList files={version.deliverables} hrefOf={(id) => deliverableUrl(audience, token, id)} locked={version.canDownload ? null : (downloadNote ?? "Downloads are turned off for this review.")} />
           </div>
         )}
 

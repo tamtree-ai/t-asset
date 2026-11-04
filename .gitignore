@@ -21,3 +21,6 @@ playwright-report/
 
 # start.sh / stop.sh logs and PIDs
 .run/
+
+# Real invoices rendered locally (client documents)
+/Invoice *.pdf

@@ -21,14 +21,18 @@ export const EDIT_WINDOW_MS = 10 * 60 * 1000;
 
 export type Author = { kind: "member"; memberId: string; label: string } | { kind: "reviewer"; reviewerId: string; label: string };
 
-/** Where a comment lands, and who may see or add to it. `internalAllowed` is true only for the studio. */
-export type Scope = { orgId: string; projectId: string; shareId: string | null; versionId: string; where: string; internalAllowed: boolean; commentsOpen: boolean };
+/**
+ * Where a comment lands, and who may see or add to it. `internalAllowed` is true only for the
+ * studio. `pageCount` is the version's document pages (null for an image or a video), so a pin's
+ * page is kept in range.
+ */
+export type Scope = { orgId: string; projectId: string; shareId: string | null; versionId: string; where: string; internalAllowed: boolean; commentsOpen: boolean; pageCount?: number | null };
 
 export async function ownerScope(orgId: string, versionId: string): Promise<Scope | null> {
   if (!/^[0-9a-f-]{36}$/i.test(versionId)) return null;
   const v = await versionOrgScope(orgId, versionId);
   if (!v) return null;
-  return { orgId, projectId: v.projectId, shareId: null, versionId, where: `${v.assetTitle} · ${v.label} v${v.number}`, internalAllowed: true, commentsOpen: true };
+  return { orgId, projectId: v.projectId, shareId: null, versionId, where: `${v.assetTitle} · ${v.label} v${v.number}`, internalAllowed: true, commentsOpen: true, pageCount: v.pageCount };
 }
 
 /** The version must be one the share shows. */
@@ -36,7 +40,7 @@ export async function guestScope(share: ShareRow, versionId: string): Promise<Sc
   if (!/^[0-9a-f-]{36}$/i.test(versionId)) return null;
   const found = findVersion(await loadShareContent(share), versionId);
   if (!found) return null;
-  return { orgId: share.orgId, projectId: share.projectId, shareId: share.id, versionId, where: whereLabel(found), internalAllowed: false, commentsOpen: share.commentsOpen };
+  return { orgId: share.orgId, projectId: share.projectId, shareId: share.id, versionId, where: whereLabel(found), internalAllowed: false, commentsOpen: share.commentsOpen, pageCount: found.version.file.pageCount };
 }
 
 const bodySchema = z
@@ -54,7 +58,7 @@ const authorCols = (a: Author) => (a.kind === "member" ? { authorMemberId: a.mem
 export async function addRoot(scope: Scope, author: Author, input: { body: string; annotation?: unknown; internal?: boolean }) {
   assertOpen(scope);
   const body = bodySchema.parse(input.body);
-  const annotation = parseAnnotation(input.annotation ?? null);
+  const annotation = parseAnnotation(input.annotation ?? null, { pageCount: scope.pageCount });
   const internal = !!input.internal;
   if (internal && !scope.internalAllowed) throw new StudioError("Only the studio can leave internal comments.");
 

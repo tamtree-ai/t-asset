@@ -8,6 +8,8 @@ import { type ActionResult, guard, StudioError } from "@/lib/studio/errors";
 import { requestOrigin, studioMember } from "@/lib/studio/member";
 import { addVariation, archiveAsset, createAsset, deleteAsset, deleteVariation, deleteVersion, renameAsset, renameVariation, setChangeNote } from "@/services/studio/assets";
 import { createClient, deleteClient, setClientArchived, updateClient } from "@/services/studio/clients";
+import { moveDeliverable, removeDeliverable, renameDeliverable } from "@/services/studio/deliverables";
+import { attachImageRenditions } from "@/services/studio/files";
 import { createProject, deleteProject, setProjectArchived, updateProject } from "@/services/studio/projects";
 import { notifyTamtree, retryFile, TamtreeError } from "@/services/studio/tamtree";
 import { createShare, getShare, regeneratePasscode, restoreShare, revokeShare, shareSecrets, type ShareInput, updateShare } from "@/services/studio/shares";
@@ -246,6 +248,43 @@ export async function retryProcessingAction(fileId: string, assetId: string): Pr
     }
     after(() => notifyTamtree(fileId));
     revalidatePath(`/studio/assets/${assetId}`);
+    return undefined;
+  });
+}
+
+/** An image from before Phase 0: the owner's browser made its watermark from the original, picked again. */
+export async function makeWatermarkAction(fileId: string, sha256: string, format: "webp" | "png"): Promise<ActionResult> {
+  return guard(async () => {
+    const m = await studioMember();
+    await attachImageRenditions({ orgId: m.orgId, fileId, sha256, format: format === "png" ? "png" : "webp" });
+    revalidatePath("/studio", "layout");
+    return undefined;
+  });
+}
+
+export async function renameDeliverableAction(id: string, label: string): Promise<ActionResult> {
+  return guard(async () => {
+    const m = await studioMember();
+    await renameDeliverable(m.orgId, id, label);
+    revalidatePath("/studio", "layout");
+    return undefined;
+  });
+}
+
+export async function moveDeliverableAction(id: string, by: -1 | 1): Promise<ActionResult> {
+  return guard(async () => {
+    const m = await studioMember();
+    await moveDeliverable(m.orgId, id, by === -1 ? -1 : 1);
+    revalidatePath("/studio", "layout");
+    return undefined;
+  });
+}
+
+export async function removeDeliverableAction(id: string): Promise<ActionResult> {
+  return guard(async () => {
+    const m = await studioMember();
+    await removeDeliverable(m.orgId, id);
+    revalidatePath("/studio", "layout");
     return undefined;
   });
 }

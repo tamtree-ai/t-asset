@@ -1,5 +1,5 @@
-export type { CommentView, ReviewApi, RoomAssetView, RoomVariationView, RoomVersionView, RoomFileView, VersionStatus } from "@/lib/studio/room-types";
-export { fileUrl } from "@/lib/studio/room-types";
+export type { CommentView, DeliverableView, DownloadPolicy, ReviewApi, RoomAssetView, RoomVariationView, RoomVersionView, RoomFileView, VersionStatus } from "@/lib/studio/room-types";
+export { deliverableUrl, fileUrl } from "@/lib/studio/room-types";
 
 import type { Annotation } from "@/lib/studio/annotation";
 
@@ -21,4 +21,4 @@ export type StageHandle = {
 export type Draft = Annotation;
 
 /** A spot just placed on the work: the shape, and for video the moment it was placed. */
-export type Placement = Pick<Annotation, "shape" | "x" | "y" | "w" | "h"> & { t?: number; frame?: number };
+export type Placement = Pick<Annotation, "shape" | "x" | "y" | "w" | "h"> & { t?: number; frame?: number; page?: number };

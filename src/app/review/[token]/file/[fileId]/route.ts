@@ -3,13 +3,12 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getBlobStore } from "@/lib/blob";
 import { renditionOf } from "@/services/studio/files";
+import { logEvent } from "@/services/studio/events";
 import { guestState } from "@/services/studio/guest";
-import { canDownloadOriginal, findFile, loadShareContent, watermarked } from "@/services/studio/room";
+import { canDownloadOriginal, findFile, SIGNED_URL_SECONDS, loadShareContent, sharePaid, watermarked, whereLabel } from "@/services/studio/room";
 
 const PRIVATE = { "cache-control": "private, no-store", "x-robots-tag": "noindex" };
 
-/** How long a signed file URL lasts. A revoked link stops new URLs at once; one already handed out works for at most this long (plan §5.4). */
-export const SIGNED_URL_SECONDS = 300;
 
 /**
  * Every file of a review is reached through here: a session for this share, a file that belongs to
@@ -31,7 +30,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
 
   const url = new URL(req.url);
   const r = url.searchParams.get("r") ?? "preview";
-  const marked = watermarked(g.share, found.version.status);
+  // An `after_payment` share reads its invoice on every request, so marking it paid unlocks the next one.
+  const paid = g.share.downloadPolicy === "after_payment" && (await sharePaid(g.share));
+  const marked = watermarked(g.share, found.version.status, paid);
   const video = file.mime.startsWith("video/");
 
   let rendition: { key: string; mime: string } | null = null;
@@ -42,9 +43,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     // A clean video frame would walk around the watermark, so a marked video has no poster.
     if (!(marked && video)) rendition = renditionOf(file, r);
   } else if (r === "original") {
-    if (!canDownloadOriginal(g.share, found.version.status)) return new Response("Downloads are turned off for this version.", { status: 403, headers: PRIVATE });
+    if (!canDownloadOriginal(g.share, found.version.status, paid)) return new Response("Downloads are turned off for this version.", { status: 403, headers: PRIVATE });
     rendition = renditionOf(file, "original");
     download = url.searchParams.get("download") === "1";
+    if (rendition) await logEvent({ orgId: g.share.orgId, projectId: g.share.projectId, shareId: g.share.id, actorLabel: g.reviewer.name, type: "file.downloaded", payload: { file: file.originalName, where: whereLabel(found), versionId: found.version.id, reviewerId: g.reviewer.id } });
   }
   if (!rendition) return new Response("Not found.", { status: 404, headers: PRIVATE });
   const target = await getBlobStore().readUrl(rendition.key, { validForS: SIGNED_URL_SECONDS, download });

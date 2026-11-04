@@ -11,7 +11,9 @@ const REVIEW_CSP = [
   "style-src 'self' 'unsafe-inline'",
   // Next's own bootstrap is inline; dev also needs eval for React's debugging.
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
-  "connect-src 'self'",
+  // A brand guide's proof is read by pdf.js, which fetches it (planning/2026-10-31-tasset-deliverables).
+  `connect-src 'self' ${BLOB_HOST}`,
+  "worker-src 'self' blob:",
   "font-src 'self' data:",
   "object-src 'none'",
   "base-uri 'self'",

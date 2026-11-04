@@ -6,10 +6,11 @@ import type { ReviewApi } from "@/lib/studio/room-types";
 import { touchReviewer } from "@/services/studio/access";
 import { getBrand } from "@/services/studio/brand";
 import { guestScope, listThreads } from "@/services/studio/comments";
+import { listDeliverables } from "@/services/studio/deliverables";
 import { guestState } from "@/services/studio/guest";
 import { getProject, projectRounds } from "@/services/studio/projects";
 import { initialSelection, latestSignoffs, projectClientName, toView } from "@/services/studio/room-data";
-import { loadShareContent } from "@/services/studio/room";
+import { loadShareContent, shareInvoice } from "@/services/studio/room";
 import { commentAction, decideAction, deleteAction, editAction, replyAction, resolveAction, threadsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,13 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
   if (content.length === 0) return <Ended token={token} studioName={brand.studioName} hasLogo={hasLogo} supportEmail={brand.supportEmail} website={brand.website} reason="revoked" />;
 
   const versionIds = content.flatMap((a) => a.variations.flatMap((v) => v.versions.map((x) => x.id)));
-  const [signoffs, project] = await Promise.all([latestSignoffs(versionIds), getProject(share.orgId, share.projectId)]);
+  const [signoffs, project, deliverables, invoice] = await Promise.all([
+    latestSignoffs(versionIds),
+    getProject(share.orgId, share.projectId),
+    listDeliverables(versionIds),
+    share.downloadPolicy === "after_payment" ? shareInvoice(share) : null,
+  ]);
+  const unlock = share.downloadPolicy === "after_payment" ? { number: invoice?.number ?? null, paid: invoice?.status === "paid" } : null;
   const rounds = project ? await projectRounds(share.orgId, project) : null;
   const initial = initialSelection(content, sp.v);
   const scope = await guestScope(share, initial.versionId);
@@ -55,7 +62,7 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
     <Workspace
       audience="client"
       token={token}
-      assets={toView(share, content, signoffs)}
+      assets={toView(share, content, signoffs, { deliverables, paid: !!unlock?.paid })}
       initial={{ ...initial, commentId: sp.c ?? null }}
       initialThreads={initialThreads}
       api={api}
@@ -67,6 +74,7 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
       rounds={rounds ? { label: rounds.label, over: rounds.over, note: rounds.note } : null}
       cover={{ key: share.id, message: share.message, notes: share.notes }}
       downloadPolicy={share.downloadPolicy}
+      invoice={unlock}
     />
   );
 }

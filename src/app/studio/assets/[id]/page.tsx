@@ -5,7 +5,8 @@ import { AssetSettings } from "@/components/studio/AssetForms";
 import { AutoRefresh } from "@/components/studio/AutoRefresh";
 import { Deliverables } from "@/components/studio/Deliverables";
 import { MakeWatermark } from "@/components/studio/MakeWatermark";
-import { bytesLabel, Empty, Page, quietBtn, StatusLine, Title } from "@/components/studio/kit";
+import { bytesLabel, Empty, Page, primaryBtn, quietBtn, StatusLine, Title } from "@/components/studio/kit";
+import { releaseFormAction } from "../../release-actions";
 import { StudioHeader } from "@/components/studio/StudioHeader";
 import { Workspace } from "@/components/review/Workspace";
 import { ProcessingNotice } from "@/components/studio/ProcessingNotice";
@@ -85,7 +86,7 @@ export default async function AssetPage({ params, searchParams }: { params: Prom
                   >
                     <span className="flex items-center justify-between gap-4">
                       <span className="text-[13.5px] font-medium">v{v.number}</span>
-                      <StatusLine status={v.status} />
+                      {v.releasedAt ? <StatusLine status={v.status} /> : <span className="text-[12px] font-medium text-fg-3">Internal</span>}
                     </span>
                     <span className="num text-[11.5px] text-fg-muted">
                       {v.openComments} open · {v.totalComments} {v.totalComments === 1 ? "comment" : "comments"}
@@ -98,6 +99,30 @@ export default async function AssetPage({ params, searchParams }: { params: Prom
               <>
                 {needsWatermark(version.file) && <MakeWatermark fileId={version.file.id} variationId={variation.id} />}
                 {version.file.processing !== "ready" && <ProcessingNotice fileId={version.file.id} assetId={id} state={version.file.processing} error={version.file.error} />}
+                {!version.releasedAt && (
+                  <form action={releaseFormAction} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-panel px-4 py-3">
+                    <input type="hidden" name="version" value={version.id} />
+                    <span className="text-[13.5px] text-fg-2">
+                      <span className="font-semibold text-fg">Internal draft.</span> Only your studio can see v{version.number}. Comment on it to get a new version; release it when it&apos;s ready for {client?.name ?? "the client"}.
+                    </span>
+                    <button type="submit" className={primaryBtn}>
+                      Release to client
+                    </button>
+                  </form>
+                )}
+                {version.meta.why && (
+                  <section aria-label="Why this short" className="rounded-xl border border-line bg-panel px-4 py-3 text-[13.5px] leading-relaxed">
+                    <h2 className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-fg-3">Why this short</h2>
+                    <p className="text-fg">{version.meta.why}</p>
+                    {(version.meta.hook || version.meta.closing) && (
+                      <p className="mt-2 text-fg-muted">
+                        {version.meta.hook && <>Hook: “{version.meta.hook}”</>}
+                        {version.meta.hook && version.meta.closing && " · "}
+                        {version.meta.closing && <>Ends on: “{version.meta.closing}”</>}
+                      </p>
+                    )}
+                  </section>
+                )}
                 <div className="room overflow-hidden rounded-xl" style={{ minHeight: 0 }}>
                   <style>{brandCss(brand.accentHex, "light")}</style>
                 <Workspace

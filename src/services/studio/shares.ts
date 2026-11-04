@@ -1,7 +1,7 @@
 /** Shares: the review links (plan §4.1, §4.6). The owner side; the guest side is `access.ts`. */
 import "server-only";
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
 import { db, schema } from "@/db";
@@ -88,7 +88,7 @@ async function pinNow(assetIds: string[]): Promise<Map<string, string[]>> {
     .select({ assetId: schema.studioVariations.assetId, versionId: schema.studioVersions.id, variationId: schema.studioVersions.variationId, number: schema.studioVersions.number })
     .from(schema.studioVersions)
     .innerJoin(schema.studioVariations, eq(schema.studioVariations.id, schema.studioVersions.variationId))
-    .where(inArray(schema.studioVariations.assetId, assetIds))
+    .where(and(inArray(schema.studioVariations.assetId, assetIds), isNotNull(schema.studioVersions.releasedAt)))
     .orderBy(desc(schema.studioVersions.number));
   const seen = new Set<string>();
   const out = new Map<string, string[]>();

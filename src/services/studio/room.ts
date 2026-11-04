@@ -5,7 +5,7 @@
  */
 import "server-only";
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { type VersionStatus } from "@/lib/studio/rounds";
@@ -36,7 +36,8 @@ export async function loadShareContent(share: Pick<ShareRow, "id" | "versionMode
         .select({ version: schema.studioVersions, file: schema.studioFiles })
         .from(schema.studioVersions)
         .innerJoin(schema.studioFiles, eq(schema.studioFiles.id, schema.studioVersions.fileId))
-        .where(inArray(schema.studioVersions.variationId, vIds))
+        // Internal versions (not yet released by the studio) never reach a guest.
+        .where(and(inArray(schema.studioVersions.variationId, vIds), isNotNull(schema.studioVersions.releasedAt)))
         .orderBy(asc(schema.studioVersions.number))
     : [];
 

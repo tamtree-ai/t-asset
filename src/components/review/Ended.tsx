@@ -1,7 +1,23 @@
 import { BrandMark } from "./BrandMark";
 
-/** "This link has ended": a revoked or expired share, or one that doesn't exist. */
-export function Ended({ token, studioName, hasLogo, supportEmail, website, reason }: { token: string; studioName: string; hasLogo: boolean; supportEmail: string | null; website: string | null; reason: "revoked" | "expired" | "missing" }) {
+/**
+ * "This link has ended": a revoked or expired share, or one that doesn't exist. `waiting`: the link
+ * is live but everything in it is still an internal draft, so there is nothing to show yet.
+ */
+export function Ended({ token, studioName, hasLogo, supportEmail, website, reason }: { token: string; studioName: string; hasLogo: boolean; supportEmail: string | null; website: string | null; reason: "revoked" | "expired" | "missing" | "waiting" }) {
+  if (reason === "waiting") {
+    return (
+      <main className="stage flex flex-1 items-center justify-center px-4 py-10">
+        <div className="flex w-full max-w-[440px] flex-col gap-5 rounded-2xl border border-room-line bg-room-surface p-8 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_40px_rgb(0_0_0/0.06)]">
+          <div className="flex justify-center">
+            <BrandMark token={token} name={studioName} hasLogo={hasLogo} size="lg" />
+          </div>
+          <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">Your work is on its way</h1>
+          <p className="text-[14.5px] leading-relaxed text-room-muted">{studioName} is finishing it now. This link will show it as soon as it&apos;s ready, so keep it handy.</p>
+        </div>
+      </main>
+    );
+  }
   return (
     <main className="stage flex flex-1 items-center justify-center px-4 py-10">
       <div className="flex w-full max-w-[440px] flex-col gap-5 rounded-2xl border border-room-line bg-room-surface p-8 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_40px_rgb(0_0_0/0.06)]">

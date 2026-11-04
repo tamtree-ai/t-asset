@@ -5,7 +5,8 @@
  */
 import { z } from "zod";
 
-export type Annotation = { v: 1; shape: "pin" | "rect" | "time"; x: number; y: number; w?: number; h?: number; t?: number; tEnd?: number; frame?: number };
+/** `page` (1-based) places it on one page of a document; images and videos have none. */
+export type Annotation = { v: 1; shape: "pin" | "rect" | "time"; x: number; y: number; w?: number; h?: number; t?: number; tEnd?: number; frame?: number; page?: number };
 
 const unit = z.number().finite().transform((n) => Math.min(1, Math.max(0, n)));
 const seconds = z.number().finite().min(0).max(86400);
@@ -22,6 +23,7 @@ export const annotationV1 = z
     t: seconds.optional(),
     tEnd: seconds.optional(),
     frame: z.number().int().min(0).max(10_000_000).optional(),
+    page: z.number().int().min(1).max(10_000).optional(),
   })
   .superRefine((a, ctx) => {
     if (a.shape === "rect" && (a.w === undefined || a.h === undefined)) ctx.addIssue({ code: "custom", message: "A box needs a width and a height." });
@@ -38,10 +40,16 @@ export const annotationV1 = z
     return a.shape === "time" ? { ...pin, x: 0, y: 0 } : pin;
   });
 
-/** Parses untrusted input; null for "no annotation" (a general comment); throws a zod error for a malformed one. */
-export function parseAnnotation(raw: unknown): Annotation | null {
+/**
+ * Parses untrusted input; null for "no annotation" (a general comment); throws a zod error for a
+ * malformed one. With `pageCount` (a document), the page is clamped to 1..pageCount and a pin with
+ * no page goes on page 1; without it, any page is dropped.
+ */
+export function parseAnnotation(raw: unknown, opts: { pageCount?: number | null } = {}): Annotation | null {
   if (raw === null || raw === undefined) return null;
-  return annotationV1.parse(raw);
+  const { page, ...a } = annotationV1.parse(raw);
+  if (!opts.pageCount) return a;
+  return { ...a, page: Math.min(Math.max(page ?? 1, 1), opts.pageCount) };
 }
 
 /** For rendering stored JSON: a bad or future-version shape is skipped rather than crashing the room. */

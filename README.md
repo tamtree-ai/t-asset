@@ -37,6 +37,18 @@ pnpm build
 
 Vercel's Hobby plan is for non-commercial use only. Move to Pro before sending client links for paid work; no code changes.
 
+## Invoices
+
+**Invoices** in the studio header (owner only). Set the business details once under **Invoices → Invoicing settings**: name, ABN, address, logo, GST, bank, terms, and the next number (`PD6326`, say). Then start an invoice from a client or project page, or from the Invoices list.
+
+- Lines are full price; the one discount applies to the whole invoice. The editor warns when a description's count ("4x screens") disagrees with the quantity.
+- A draft has no number and follows the current settings. **Issue invoice** takes the next number and keeps a copy of the studio and client details, so a later change (a new address) leaves it as sent. Issued invoices can't be edited: mark them paid, void them (they keep the number) or duplicate them.
+- **Print or save as PDF** opens the invoice as a page of its own; Chrome names the PDF "Invoice PD6326".
+- A client with invoices can be archived, not deleted.
+- Without the app running: `pnpm invoice invoices/PD6326.json` (see [invoices/README.md](invoices/README.md)) renders the same page to PDF.
+
+The plan is in `../tamtree_stickstage/planning/2026-10-08-invoices/plan.md`. The migration is `drizzle/0001_invoices.sql`: run `pnpm db:migrate` against Neon **before** deploying this.
+
 ## Limits that matter
 
 | Limit | Value |

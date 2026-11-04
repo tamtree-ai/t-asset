@@ -10,14 +10,19 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { type VersionStatus } from "@/lib/studio/rounds";
 
+export { canDownloadOriginal, watermarked } from "@/lib/studio/policy";
+
 type ShareRow = typeof schema.studioShares.$inferSelect;
 type FileRow = typeof schema.studioFiles.$inferSelect;
 
-export type RoomFile = Pick<FileRow, "id" | "mime" | "width" | "height" | "durationS" | "fpsNum" | "fpsDen" | "processing" | "bytes" | "originalName" | "sha256">;
+/** How long a signed file URL lasts. A revoked link stops new URLs at once; one already handed out works for at most this long (plan §5.4). */
+export const SIGNED_URL_SECONDS = 300;
+
+export type RoomFile = Pick<FileRow, "id" | "mime" | "width" | "height" | "durationS" | "fpsNum" | "fpsDen" | "processing" | "bytes" | "originalName" | "sha256" | "pageCount">;
 
 export type RoomVersion = { id: string; number: number; status: VersionStatus; changeNote: string; createdAt: Date; file: RoomFile };
 export type RoomVariation = { id: string; label: string; versions: RoomVersion[] };
-export type RoomAsset = { id: string; title: string; kind: "image" | "video"; variations: RoomVariation[] };
+export type RoomAsset = { id: string; title: string; kind: "image" | "video" | "document"; variations: RoomVariation[] };
 
 export async function loadShareContent(share: Pick<ShareRow, "id" | "versionMode">): Promise<RoomAsset[]> {
   const items = await db.select().from(schema.studioShareItems).where(eq(schema.studioShareItems.shareId, share.id)).orderBy(asc(schema.studioShareItems.sort));
@@ -56,7 +61,7 @@ export async function loadShareContent(share: Pick<ShareRow, "id" | "versionMode
             status: r.version.status,
             changeNote: r.version.changeNote,
             createdAt: r.version.createdAt,
-            file: { id: r.file.id, mime: r.file.mime, width: r.file.width, height: r.file.height, durationS: r.file.durationS, fpsNum: r.file.fpsNum, fpsDen: r.file.fpsDen, processing: r.file.processing, bytes: r.file.bytes, originalName: r.file.originalName, sha256: r.file.sha256 },
+            file: { id: r.file.id, mime: r.file.mime, width: r.file.width, height: r.file.height, durationS: r.file.durationS, fpsNum: r.file.fpsNum, fpsDen: r.file.fpsDen, processing: r.file.processing, bytes: r.file.bytes, originalName: r.file.originalName, sha256: r.file.sha256, pageCount: r.file.pageCount },
           })),
       }))
       .filter((v) => v.versions.length > 0);
@@ -87,21 +92,29 @@ export function findFile(content: RoomAsset[], fileId: string): Found | null {
 
 export const whereLabel = (f: Found) => `${f.asset.title} · ${f.variation.label} v${f.version.number}`;
 
-/** Whether the previews of this version carry the watermark: switched on for the share, and the version is not yet approved. */
-export function watermarked(share: Pick<ShareRow, "watermark">, status: VersionStatus): boolean {
-  return share.watermark && status !== "approved";
+export type ShareInvoice = { id: string; number: string | null; status: "draft" | "issued" | "paid" | "void" };
+
+/** The invoice an `after_payment` share waits on, if it still exists. */
+export async function shareInvoice(share: Pick<ShareRow, "invoiceId" | "orgId">): Promise<ShareInvoice | null> {
+  if (!share.invoiceId) return null;
+  const [row] = await db
+    .select({ id: schema.studioInvoices.id, number: schema.studioInvoices.number, status: schema.studioInvoices.status })
+    .from(schema.studioInvoices)
+    .where(and(eq(schema.studioInvoices.id, share.invoiceId), eq(schema.studioInvoices.orgId, share.orgId)))
+    .limit(1);
+  return row ?? null;
 }
 
-export function canDownloadOriginal(share: Pick<ShareRow, "downloadPolicy">, status: VersionStatus): boolean {
-  if (share.downloadPolicy === "always") return true;
-  if (share.downloadPolicy === "after_approval") return status === "approved";
-  return false;
+/** Paid: the share's invoice exists and is marked paid. A void invoice never unlocks. Read on every request, so marking it paid unlocks the next one. */
+export async function sharePaid(share: Pick<ShareRow, "invoiceId" | "orgId">): Promise<boolean> {
+  return (await shareInvoice(share))?.status === "paid";
 }
 
 export async function versionOrgScope(orgId: string, versionId: string) {
   const [row] = await db
-    .select({ projectId: schema.studioProjects.id, assetTitle: schema.studioAssets.title, label: schema.studioVariations.label, number: schema.studioVersions.number, status: schema.studioVersions.status })
+    .select({ projectId: schema.studioProjects.id, assetTitle: schema.studioAssets.title, label: schema.studioVariations.label, number: schema.studioVersions.number, status: schema.studioVersions.status, pageCount: schema.studioFiles.pageCount })
     .from(schema.studioVersions)
+    .innerJoin(schema.studioFiles, eq(schema.studioFiles.id, schema.studioVersions.fileId))
     .innerJoin(schema.studioVariations, eq(schema.studioVariations.id, schema.studioVersions.variationId))
     .innerJoin(schema.studioAssets, eq(schema.studioAssets.id, schema.studioVariations.assetId))
     .innerJoin(schema.studioProjects, eq(schema.studioProjects.id, schema.studioAssets.projectId))

@@ -6,7 +6,8 @@
  *
  * It uploads a small file with the hand-built signed PUT Tamtree will use, reads it back through a
  * signed GET (whole, and a byte range, which video seeking needs), checks `download=1` names the
- * file, then deletes it. Nothing is left in the store. Browser multipart uploads and iPhone Safari
+ * file, checks a cross-origin read (pdf.js reads brand guide proofs that way), then deletes it.
+ * Nothing is left in the store. Browser multipart uploads and iPhone Safari
  * playback still need a deployed app (see the handover).
  */
 import { randomUUID } from "node:crypto";
@@ -44,6 +45,17 @@ async function main() {
     const ranged = await fetch(url, { headers: { range: "bytes=10-19" } });
     const slice = await ranged.text();
     record("signed GET honours Range with 206 (video seeking)", ranged.status === 206 && slice === "abcdefghij", `${ranged.status} ${ranged.headers.get("content-range") ?? ""}`);
+
+    // The room reads a brand guide's proof with pdf.js, which fetches it cross-origin, with ranges.
+    const origin = process.env.APP_URL ?? "https://t-asset.example";
+    const cors = await fetch(url, { headers: { origin, range: "bytes=0-9" } });
+    const allow = cors.headers.get("access-control-allow-origin");
+    record("signed GET allows a cross-origin read (pdf.js in the room)", allow === "*" || allow === origin, allow ?? "no access-control-allow-origin");
+    const exposed = (cors.headers.get("access-control-expose-headers") ?? "").toLowerCase();
+    record("cross-origin reads can see Content-Range (pdf.js range loading)", exposed === "*" || exposed.includes("content-range"), exposed || "no access-control-expose-headers; pdf.js falls back to one full download");
+
+    const readStart = await store.readStart(key, 10);
+    record("readStart reads the first bytes (deliverable type check)", new TextDecoder().decode(readStart) === "0123456789", String(readStart.length));
 
     const dl = await fetch(await store.readUrl(key, { validForS: 300, download: true }));
     const cd = dl.headers.get("content-disposition") ?? "";

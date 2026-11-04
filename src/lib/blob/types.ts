@@ -17,6 +17,8 @@ export interface BlobStore {
   /** A signed URL that reads `key` for `validForS` seconds. `download` asks the browser to save it under the key's last segment. */
   readUrl(key: string, opts: { validForS: number; download?: boolean }): Promise<string>;
   head(key: string): Promise<BlobHead | null>;
+  /** The first `bytes` bytes of `key` (fewer if it is shorter), to check what a file really is. */
+  readStart(key: string, bytes: number): Promise<Uint8Array>;
   /** Removes the keys; fine if some are already gone. */
   delete(keys: string[]): Promise<void>;
 }

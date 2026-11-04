@@ -23,6 +23,7 @@ export function describePlace(a: Annotation | null, fps?: Fps | null): string {
   const time = a.t === undefined ? null : a.tEnd !== undefined ? `${formatTimecode(a.t, fps)} – ${formatTimecode(a.tEnd, fps)}` : formatTimecode(a.t, fps);
   if (a.shape === "time") return time ? `At ${time}` : "General comment";
   const what = a.shape === "rect" ? "Box" : "Pin";
+  if (a.page !== undefined) return `${what} on page ${a.page}`;
   return time ? `${what} at ${time}` : what;
 }
 

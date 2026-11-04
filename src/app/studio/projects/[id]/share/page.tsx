@@ -5,6 +5,7 @@ import { StudioHeader } from "@/components/studio/StudioHeader";
 import { ShareForm } from "@/components/studio/ShareForm";
 import { studioMember } from "@/lib/studio/member";
 import { projectOverview } from "@/services/studio/projects";
+import { unlockInvoices } from "@/services/studio/shares";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function NewSharePage({ params, searchParams }: { params: P
   if (!overview) notFound();
   const { project, client, assets } = overview;
   const ready = assets.filter((a) => a.latest);
+  const invoices = await unlockInvoices(member.orgId, id);
 
   return (
     <>
@@ -27,7 +29,8 @@ export default async function NewSharePage({ params, searchParams }: { params: P
           <ShareForm
             projectId={id}
             assets={assets.map((a) => ({ id: a.id, title: a.title, kind: a.kind, hasVersion: !!a.latest }))}
-            initial={{ title: project.name, message: "", notes: [], expiresAt: "", downloadPolicy: "after_approval", watermark: true, commentsOpen: true, versionMode: "latest", assetIds: ready.some((a) => a.id === sp.asset) ? [sp.asset!] : ready.map((a) => a.id) }}
+            invoices={invoices}
+            initial={{ title: project.name, message: "", notes: [], expiresAt: "", downloadPolicy: "after_approval", invoiceId: null, watermark: true, commentsOpen: true, versionMode: "latest", assetIds: ready.some((a) => a.id === sp.asset) ? [sp.asset!] : ready.map((a) => a.id) }}
           />
         )}
       </Page>

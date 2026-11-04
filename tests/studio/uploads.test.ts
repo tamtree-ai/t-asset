@@ -16,6 +16,11 @@ const MB = 1024 * 1024;
 /** What the owner's browser measures of an image before sending it. */
 const FACTS = { sha256: "AB".repeat(32), width: 1200, height: 900 };
 
+/** What the owner's browser makes of an image before finishing: its watermarked preview and thumbnail. */
+async function renditions(fileId: string, names: string[] = ["wm_preview.webp", "thumb.webp"]) {
+  for (const n of names) await c.put(`d/${fileId}/${n}`, `MADE-${n}`, n.endsWith(".pdf") ? "application/pdf" : "image/webp");
+}
+
 /** Sends a body to a signed target through the dev route, as the browser would. */
 async function upload(target: { url: string; headers: Record<string, string> }, body: string | Uint8Array) {
   const url = new URL(target.url);
@@ -88,12 +93,17 @@ describe("finishing an upload", () => {
     await c.version(a.orgId, t.variationId);
     const s = await files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "v2.png", mime: "image/png", bytes: 5 });
     await upload(s.target!, "12345");
-    const done = await files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "Bigger logo", image: FACTS });
+    await renditions(s.fileId);
+    const done = await files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "Bigger logo", facts: FACTS });
     expect(done).toMatchObject({ number: 2, alreadyDone: false, ready: true });
     const [row] = await c.db.select().from(c.schema.studioFiles).where(eq(c.schema.studioFiles.id, s.fileId));
-    expect(row).toMatchObject({ processing: "ready", previewKey: s.key, wmPreviewKey: s.key, thumbKey: s.key, sha256: "ab".repeat(32), width: 1200, height: 900, derivedBytes: 0 });
+    const wm = `d/${s.fileId}/wm_preview.webp`;
+    const thumb = `d/${s.fileId}/thumb.webp`;
+    expect(row).toMatchObject({ processing: "ready", previewKey: s.key, wmPreviewKey: wm, thumbKey: thumb, sha256: "ab".repeat(32), width: 1200, height: 900 });
+    expect(row!.derivedBytes).toBe("MADE-wm_preview.webp".length + "MADE-thumb.webp".length);
     expect(files.renditionOf(row!, "preview")).toEqual({ key: s.key, mime: "image/png" });
-    expect(files.keysOf(row!)).toEqual([s.key]);
+    expect(files.renditionOf(row!, "wm")).toEqual({ key: wm, mime: "image/webp" });
+    expect(files.keysOf(row!).sort()).toEqual([s.key, wm, thumb].sort());
     const [v] = await c.db.select().from(c.schema.studioVersions).where(eq(c.schema.studioVersions.id, done.versionId));
     expect(v).toMatchObject({ changeNote: "Bigger logo", status: "in_review" });
     const events = await c.db.select().from(c.schema.studioEvents).where(eq(c.schema.studioEvents.projectId, t.projectId));
@@ -122,24 +132,120 @@ describe("finishing an upload", () => {
     const t = await c.tree(a.orgId, "image");
     const s = await files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "a.png", mime: "image/png", bytes: 3 });
     await upload(s.target!, "abc");
-    const one = await files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", image: FACTS });
-    const two = await files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", image: FACTS });
+    await renditions(s.fileId);
+    const one = await files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: FACTS });
+    const two = await files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: FACTS });
     expect(two).toMatchObject({ versionId: one.versionId, alreadyDone: true });
   });
 
   it("refuses when nothing arrived, or fewer bytes than promised", async () => {
     const t = await c.tree(a.orgId, "image");
     const s = await files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "a.png", mime: "image/png", bytes: 10 });
-    await expect(files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", image: FACTS })).rejects.toThrow(/didn't arrive/);
+    await expect(files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: FACTS })).rejects.toThrow(/didn't arrive/);
     await c.put(s.key, "short", "image/png");
-    await expect(files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", image: FACTS })).rejects.toThrow(/incomplete \(5 of 10 bytes\)/);
+    await expect(files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: FACTS })).rejects.toThrow(/incomplete \(5 of 10 bytes\)/);
   });
 
   it("refuses another org's file", async () => {
     const t = await c.tree(a.orgId, "image");
     const s = await files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "a.png", mime: "image/png", bytes: 3 });
     await upload(s.target!, "abc");
-    await expect(files.finishUpload({ orgId: b.orgId, memberId: b.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", image: FACTS })).rejects.toThrow(/not found/);
+    await expect(files.finishUpload({ orgId: b.orgId, memberId: b.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: FACTS })).rejects.toThrow(/not found/);
+  });
+});
+
+describe("renditions made in the owner's browser", () => {
+  it("hands out signed PUTs for an image's watermark and thumbnail, with the watermark text", async () => {
+    const t = await c.tree(a.orgId, "image");
+    const s = await files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "logo.png", mime: "image/png", bytes: 5 });
+    const r = await files.renditionTargets({ orgId: a.orgId, fileId: s.fileId, variationId: t.variationId, format: "webp" });
+    expect(r.kind).toBe("image");
+    expect(Object.keys(r.targets).sort()).toEqual(["thumb", "wm_preview"]);
+    expect(r.targets.wm_preview!.key).toBe(`d/${s.fileId}/wm_preview.webp`);
+    expect(r.watermarkText).toBe("STUDIO A · PREVIEW");
+    expect(r.proofText).toBe("STUDIO A · PROOF · ACME");
+    expect(r.footerText).toMatch(/^Proof for Acme · \d{4}-\d{2}-\d{2} · not licensed for use until paid$/);
+    expect((await upload(r.targets.wm_preview!, "made")).status).toBe(200);
+    const png = await files.renditionTargets({ orgId: a.orgId, fileId: s.fileId, variationId: t.variationId, format: "png" });
+    expect(png.targets.thumb!.contentType).toBe("image/png");
+  });
+
+  it("refuses a video, another org, and a file that already has its previews", async () => {
+    const v = await c.tree(a.orgId, "video");
+    const sv = await files.startUpload({ orgId: a.orgId, variationId: v.variationId, name: "a.mp4", mime: "video/mp4", bytes: 5 });
+    await expect(files.renditionTargets({ orgId: a.orgId, fileId: sv.fileId, variationId: v.variationId, format: "webp" })).rejects.toThrow(/Tamtree/);
+    const t = await c.tree(a.orgId, "image");
+    const s = await files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "a.png", mime: "image/png", bytes: 3 });
+    await expect(files.renditionTargets({ orgId: b.orgId, fileId: s.fileId, variationId: t.variationId, format: "webp" })).rejects.toThrow(/not found/);
+    const done = await c.version(a.orgId, t.variationId);
+    await expect(files.renditionTargets({ orgId: a.orgId, fileId: done.fileId, variationId: t.variationId, format: "webp" })).rejects.toThrow(/already has/);
+  });
+
+  it("refuses to finish an image whose watermark or thumbnail didn't arrive", async () => {
+    const t = await c.tree(a.orgId, "image");
+    const s = await files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "a.png", mime: "image/png", bytes: 3 });
+    await upload(s.target!, "abc");
+    await expect(files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: FACTS })).rejects.toThrow(/watermarked preview and the thumbnail didn't arrive/);
+    await renditions(s.fileId, ["thumb.webp"]);
+    await expect(files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: FACTS })).rejects.toThrow(/^The watermarked preview didn't arrive/);
+    await renditions(s.fileId, ["wm_preview.webp"]);
+    expect((await files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: FACTS })).ready).toBe(true);
+  });
+
+  it("finds PNG renditions when the browser couldn't encode WebP", async () => {
+    const t = await c.tree(a.orgId, "image");
+    const s = await files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "a.png", mime: "image/png", bytes: 3 });
+    await upload(s.target!, "abc");
+    await renditions(s.fileId, ["wm_preview.png", "thumb.png"]);
+    await files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: FACTS, format: "png" });
+    const [row] = await c.db.select().from(c.schema.studioFiles).where(eq(c.schema.studioFiles.id, s.fileId));
+    expect(files.renditionOf(row!, "wm")).toEqual({ key: `d/${s.fileId}/wm_preview.png`, mime: "image/png" });
+  });
+
+  it("gives an image from before Phase 0 its watermark once the same file is picked again", async () => {
+    const t = await c.tree(a.orgId, "image");
+    const v = await c.version(a.orgId, t.variationId);
+    const [before] = await c.db.update(c.schema.studioFiles).set({ previewKey: `o/${v.fileId}/banner.png`, wmPreviewKey: `o/${v.fileId}/banner.png`, thumbKey: `o/${v.fileId}/banner.png` }).where(eq(c.schema.studioFiles.id, v.fileId)).returning();
+    expect(files.needsWatermark(before!)).toBe(true);
+    const r = await files.renditionTargets({ orgId: a.orgId, fileId: v.fileId, variationId: t.variationId, format: "webp" });
+    await upload(r.targets.wm_preview!, "WM");
+    await upload(r.targets.thumb!, "TH");
+    await expect(files.attachImageRenditions({ orgId: a.orgId, fileId: v.fileId, sha256: "0".repeat(64), format: "webp" })).rejects.toThrow(/same file/);
+    await files.attachImageRenditions({ orgId: a.orgId, fileId: v.fileId, sha256: v.sha256, format: "webp" });
+    const [after] = await c.db.select().from(c.schema.studioFiles).where(eq(c.schema.studioFiles.id, v.fileId));
+    expect(after).toMatchObject({ wmPreviewKey: `d/${v.fileId}/wm_preview.webp`, thumbKey: `d/${v.fileId}/thumb.webp`, previewKey: `o/${v.fileId}/banner.png` });
+    expect(files.needsWatermark(after!)).toBe(false);
+    await expect(files.attachImageRenditions({ orgId: a.orgId, fileId: v.fileId, sha256: v.sha256, format: "webp" })).rejects.toThrow(/already has/);
+  });
+});
+
+describe("brand guide documents", () => {
+  const DOC = { sha256: "cd".repeat(32), width: 1131, height: 1600, pageCount: 3 };
+
+  it("takes a PDF up to 100 MB, and only a PDF", async () => {
+    const t = await c.tree(a.orgId, "document");
+    await expect(files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "g.png", mime: "image/png", bytes: 10 })).rejects.toThrow(/takes a PDF/);
+    await expect(files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "g.pdf", mime: "application/pdf", bytes: 101 * MB })).rejects.toThrow(/100 MB/);
+  });
+
+  it("asks the browser for both proofs and a thumbnail, and is ready once they arrive", async () => {
+    const t = await c.tree(a.orgId, "document");
+    const s = await files.startUpload({ orgId: a.orgId, variationId: t.variationId, name: "Brand Guide.pdf", mime: "application/pdf", bytes: 5 });
+    const r = await files.renditionTargets({ orgId: a.orgId, fileId: s.fileId, variationId: t.variationId, format: "webp" });
+    expect(r.kind).toBe("document");
+    expect(Object.fromEntries(Object.entries(r.targets).map(([k, v]) => [k, v.contentType]))).toEqual({ preview: "application/pdf", wm_preview: "application/pdf", thumb: "image/webp" });
+    await upload(s.target!, "%PDF-");
+    await renditions(s.fileId, ["wm_preview.pdf", "thumb.webp"]);
+    await expect(files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: DOC })).rejects.toThrow(/clean proof didn't arrive/);
+    await expect(files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: { ...DOC, pageCount: undefined } })).rejects.toThrow(/between 1 and 120 pages/);
+    await expect(files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: { ...DOC, pageCount: 121 } })).rejects.toThrow(/between 1 and 120 pages/);
+    await renditions(s.fileId, ["preview.pdf"]);
+    expect((await files.finishUpload({ orgId: a.orgId, memberId: a.memberId, fileId: s.fileId, variationId: t.variationId, changeNote: "", facts: DOC })).ready).toBe(true);
+    const [row] = await c.db.select().from(c.schema.studioFiles).where(eq(c.schema.studioFiles.id, s.fileId));
+    expect(row).toMatchObject({ processing: "ready", pageCount: 3, width: 1131, height: 1600, previewKey: `d/${s.fileId}/preview.pdf`, wmPreviewKey: `d/${s.fileId}/wm_preview.pdf`, originalKey: s.key });
+    expect(files.renditionOf(row!, "wm")).toEqual({ key: `d/${s.fileId}/wm_preview.pdf`, mime: "application/pdf" });
+    expect(files.renditionOf(row!, "original")).toEqual({ key: s.key, mime: "application/pdf" });
+    expect(files.renditionOf(row!, "poster")).toBeNull();
   });
 });
 

@@ -4,6 +4,8 @@
  * derived renditions and the metadata (plan §5.3).
  */
 import { sql } from "drizzle-orm";
+
+import type { InvoiceBillTo, InvoiceDiscount, InvoiceLine, InvoiceStudio } from "@/lib/studio/invoice";
 import {
   bigint,
   boolean,
@@ -61,11 +63,11 @@ export const sessions = pgTable("sessions", {
 
 export const studioRoomTheme = pgEnum("studio_room_theme", ["light", "dark", "auto"]);
 export const studioProjectStatus = pgEnum("studio_project_status", ["active", "paused", "delivered"]);
-export const studioAssetKind = pgEnum("studio_asset_kind", ["image", "video"]);
+export const studioAssetKind = pgEnum("studio_asset_kind", ["image", "video", "document"]);
 export const studioVersionStatus = pgEnum("studio_version_status", ["in_review", "changes_requested", "approved"]);
 /** `uploading`: the browser is still sending the original. `pending`: Tamtree is making the renditions. */
 export const studioProcessing = pgEnum("studio_processing", ["uploading", "pending", "ready", "failed"]);
-export const studioDownloadPolicy = pgEnum("studio_download_policy", ["none", "after_approval", "always"]);
+export const studioDownloadPolicy = pgEnum("studio_download_policy", ["none", "after_approval", "always", "after_payment"]);
 export const studioVersionMode = pgEnum("studio_version_mode", ["latest", "pinned"]);
 export const studioDecisionKind = pgEnum("studio_decision", ["approved", "changes_requested"]);
 
@@ -91,6 +93,8 @@ export const studioFiles = pgTable(
     /** Frame rate as ffprobe reports it (30000/1001 stays exact). */
     fpsNum: integer("fps_num"),
     fpsDen: integer("fps_den"),
+    /** Documents only: pages in the PDF (and in its proofs). */
+    pageCount: integer("page_count"),
     previewKey: text("preview_key"),
     thumbKey: text("thumb_key"),
     posterKey: text("poster_key"),
@@ -120,6 +124,23 @@ export const studioBrand = pgTable("studio_brand", {
   roomTheme: studioRoomTheme("room_theme").notNull().default("light"),
   website: text("website"),
   supportEmail: text("support_email"),
+  // Invoicing (planning/2026-10-08-invoices). The name on an invoice is `legal_name`, else `studio_name`.
+  legalName: text("legal_name"),
+  abn: text("abn"),
+  address: text("address"),
+  gstRegistered: boolean("gst_registered").notNull().default(false),
+  paymentTermsDays: integer("payment_terms_days").notNull().default(30),
+  /** Null means the standard terms (DEFAULT_TERMS). */
+  invoiceTerms: text("invoice_terms"),
+  bankAccountName: text("bank_account_name"),
+  bankBsb: text("bank_bsb"),
+  bankAccountNo: text("bank_account_no"),
+  payByPost: boolean("pay_by_post").notNull().default(true),
+  invoicePrefix: text("invoice_prefix").notNull().default("PD"),
+  /** The number the next issued invoice takes; issuing increments it in the same transaction. */
+  nextInvoiceNo: integer("next_invoice_no").notNull().default(1),
+  /** A small data: URL (PNG, JPEG, WebP or SVG), so a logo needs no Blob file or Tamtree step. */
+  invoiceLogo: text("invoice_logo"),
   updatedAt: updatedAt(),
 });
 
@@ -132,6 +153,7 @@ export const studioClients = pgTable(
     company: text("company"),
     contacts: jsonb("contacts").$type<{ name: string; email: string; role?: string }[]>().notNull().default([]),
     notes: text("notes").notNull().default(""),
+    billingAddress: text("billing_address"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -218,6 +240,8 @@ export const studioShares = pgTable(
     passcodeEnc: text("passcode_enc").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     downloadPolicy: studioDownloadPolicy("download_policy").notNull().default("after_approval"),
+    /** The invoice whose payment unlocks downloads under `after_payment`; must be for this project's client. */
+    invoiceId: uuid("invoice_id").references((): AnyPgColumn => studioInvoices.id, { onDelete: "set null" }),
     watermark: boolean("watermark").notNull().default(true),
     commentsOpen: boolean("comments_open").notNull().default(true),
     versionMode: studioVersionMode("version_mode").notNull().default("latest"),
@@ -227,6 +251,24 @@ export const studioShares = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index("studio_shares_project").on(t.projectId)],
+);
+
+/**
+ * The deliverables of a version (planning/2026-10-31-tasset-deliverables): the SVG, AI, EPS, PDF or
+ * ZIP files a client takes away. Never shown in the room, only listed and downloaded under the
+ * share's download rules.
+ */
+export const studioVersionFiles = pgTable(
+  "studio_version_files",
+  {
+    id: id(),
+    versionId: uuid("version_id").notNull().references(() => studioVersions.id, { onDelete: "cascade" }),
+    fileId: uuid("file_id").notNull().references(() => studioFiles.id),
+    label: text("label").notNull(),
+    sort: integer("sort").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("studio_version_files_version_file").on(t.versionId, t.fileId), index("studio_version_files_file").on(t.fileId)],
 );
 
 export const studioShareItems = pgTable(
@@ -354,4 +396,44 @@ export const studioRateLimits = pgTable(
     count: integer("count").notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.bucket, t.key, t.windowStart] })],
+);
+
+// ── Invoices ───────────────────────────────────────────────────────────────
+// planning/2026-10-08-invoices. A draft reads the studio and client live; issuing assigns the
+// number and freezes both into `snapshot`, so a later change (a new address) leaves it as sent.
+
+export const studioInvoiceStatus = pgEnum("studio_invoice_status", ["draft", "issued", "paid", "void"]);
+
+export const studioInvoices = pgTable(
+  "studio_invoices",
+  {
+    id: id(),
+    orgId: uuid("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+    /** No action (checked at the end of the statement, so an org delete still cascades): a client with invoices is archived, not deleted. */
+    clientId: uuid("client_id").notNull().references(() => studioClients.id, { onDelete: "no action" }),
+    projectId: uuid("project_id").references(() => studioProjects.id, { onDelete: "set null" }),
+    /** Null while a draft. */
+    number: text("number"),
+    status: studioInvoiceStatus("status").notNull().default("draft"),
+    issueDate: text("issue_date").notNull(),
+    dueDate: text("due_date").notNull(),
+    /** Always at full price; cents. */
+    lines: jsonb("lines").$type<InvoiceLine[]>().notNull().default([]),
+    discount: jsonb("discount").$type<InvoiceDiscount>(),
+    notes: text("notes").notNull().default(""),
+    /** Kept in step with the lines, for the list. */
+    totalCents: integer("total_cents").notNull().default(0),
+    snapshot: jsonb("snapshot").$type<{ studio: InvoiceStudio; billTo: InvoiceBillTo } | null>(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("studio_invoices_org").on(t.orgId, t.createdAt),
+    index("studio_invoices_client").on(t.clientId),
+    uniqueIndex("studio_invoices_org_number").on(t.orgId, t.number),
+    check("studio_invoices_number_when_issued", sql`${t.status} = 'draft' or (${t.number} is not null and ${t.snapshot} is not null)`),
+  ],
 );

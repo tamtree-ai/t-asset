@@ -1,9 +1,14 @@
 /** The shapes the room's client components share with the server (dates as ISO strings, so they cross the boundary). */
 import type { CommentView } from "@/services/studio/comments";
 
-export type { CommentView };
+import type { DownloadPolicy } from "./policy";
 
-export type RoomFileView = { id: string; mime: string; width: number | null; height: number | null; durationS: number | null; fpsNum: number | null; fpsDen: number | null; processing: "uploading" | "pending" | "ready" | "failed"; bytes: number; originalName: string };
+export type { CommentView, DownloadPolicy };
+
+export type RoomFileView = { id: string; mime: string; width: number | null; height: number | null; durationS: number | null; fpsNum: number | null; fpsDen: number | null; processing: "uploading" | "pending" | "ready" | "failed"; bytes: number; originalName: string; pageCount: number | null };
+
+/** A file attached to a version for the client to take away. */
+export type DeliverableView = { fileId: string; label: string; name: string; ext: string; bytes: number };
 
 export type VersionStatus = "in_review" | "changes_requested" | "approved";
 
@@ -21,10 +26,12 @@ export type RoomVersionView = {
   latest: boolean;
   /** Last sign-off on this version, if any. */
   signoff: { decision: "approved" | "changes_requested"; name: string; at: string } | null;
+  /** Listed under the version; downloadable when `canDownload`. */
+  deliverables: DeliverableView[];
 };
 
 export type RoomVariationView = { id: string; label: string; versions: RoomVersionView[] };
-export type RoomAssetView = { id: string; title: string; kind: "image" | "video"; variations: RoomVariationView[] };
+export type RoomAssetView = { id: string; title: string; kind: "image" | "video" | "document"; variations: RoomVariationView[] };
 
 export type Ok<T> = { ok: true; data: T };
 export type Err = { ok: false; error: string };
@@ -48,4 +55,9 @@ export type ReviewApi = {
 export function fileUrl(audience: "client" | "owner", token: string | null, fileId: string, rendition: "preview" | "poster" | "thumb" | "original", download = false): string {
   const base = audience === "client" ? `/review/${token}/file/${fileId}` : `/api/studio/files/${fileId}`;
   return `${base}?r=${rendition}${download ? "&download=1" : ""}`;
+}
+
+/** Where a deliverable is downloaded from, by audience. Always a download. */
+export function deliverableUrl(audience: "client" | "owner", token: string | null, fileId: string): string {
+  return audience === "client" ? `/review/${token}/deliverable/${fileId}` : `/api/studio/files/${fileId}?r=original&download=1`;
 }

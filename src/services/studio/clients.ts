@@ -14,6 +14,7 @@ export const clientInput = z.object({
   name: z.string().trim().min(1, "Give the client a name.").max(80, "Keep the client name under 80 characters."),
   company: z.string().trim().max(80).optional().transform((s) => s || null),
   notes: z.string().max(4000, "Keep notes under 4000 characters.").default(""),
+  billingAddress: z.string().trim().max(300, "Keep the billing address under 300 characters.").optional().transform((s) => s || null),
   contacts: z
     .array(
       z.object({
@@ -91,12 +92,14 @@ export async function listClients(orgId: string, opts: { q?: string; archived?: 
 export async function deleteClient(orgId: string, id: string): Promise<void> {
   const client = await getClient(orgId, id);
   if (!client) throw new StudioError("That client was not found.");
+  const [inv] = await db.select({ id: schema.studioInvoices.id }).from(schema.studioInvoices).where(eq(schema.studioInvoices.clientId, id)).limit(1);
+  if (inv) throw new StudioError(`${client.name} has invoices, which are kept as records. Archive the client instead.`);
   const fileIds = await fileIdsUnder(orgId, { clientId: id });
   await db.delete(schema.studioClients).where(and(eq(schema.studioClients.id, id), eq(schema.studioClients.orgId, orgId)));
   await removeFiles(orgId, fileIds);
 }
 
-/** File ids of every version below a client or a project: collected before the delete, because versions point at files without a cascade. */
+/** File ids of every version below a client or a project, and of their deliverables: collected before the delete, because versions point at files without a cascade. */
 export async function fileIdsUnder(orgId: string, scope: { clientId?: string; projectId?: string; assetId?: string; variationId?: string; versionId?: string }): Promise<string[]> {
   const conds = [eq(schema.studioProjects.orgId, orgId)];
   if (scope.clientId) conds.push(eq(schema.studioProjects.clientId, scope.clientId));
@@ -105,11 +108,12 @@ export async function fileIdsUnder(orgId: string, scope: { clientId?: string; pr
   if (scope.variationId) conds.push(eq(schema.studioVariations.id, scope.variationId));
   if (scope.versionId) conds.push(eq(schema.studioVersions.id, scope.versionId));
   const rows = await db
-    .select({ fileId: schema.studioVersions.fileId })
+    .select({ fileId: schema.studioVersions.fileId, deliverable: schema.studioVersionFiles.fileId })
     .from(schema.studioVersions)
     .innerJoin(schema.studioVariations, eq(schema.studioVariations.id, schema.studioVersions.variationId))
     .innerJoin(schema.studioAssets, eq(schema.studioAssets.id, schema.studioVariations.assetId))
     .innerJoin(schema.studioProjects, eq(schema.studioProjects.id, schema.studioAssets.projectId))
+    .leftJoin(schema.studioVersionFiles, eq(schema.studioVersionFiles.versionId, schema.studioVersions.id))
     .where(and(...conds));
-  return rows.map((r) => r.fileId);
+  return [...new Set(rows.flatMap((r) => (r.deliverable ? [r.fileId, r.deliverable] : [r.fileId])))];
 }

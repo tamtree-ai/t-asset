@@ -13,22 +13,28 @@ export type ShareFormValues = {
   message: string;
   notes: string[];
   expiresAt: string;
-  downloadPolicy: "none" | "after_approval" | "always";
+  downloadPolicy: "none" | "after_approval" | "always" | "after_payment";
+  invoiceId: string | null;
   watermark: boolean;
   commentsOpen: boolean;
   versionMode: "latest" | "pinned";
   assetIds: string[];
 };
 
+/** An invoice a share can wait on: the client's issued and paid ones. */
+export type UnlockInvoice = { id: string; number: string | null; status: string; totalCents: number };
+
 export function ShareForm({
   projectId,
   shareId,
   assets,
+  invoices,
   initial,
 }: {
   projectId: string;
   shareId?: string;
   assets: { id: string; title: string; kind: string; hasVersion: boolean }[];
+  invoices: UnlockInvoice[];
   initial: ShareFormValues;
 }) {
   const router = useRouter();
@@ -38,7 +44,8 @@ export function ShareForm({
   const set = <K extends keyof typeof v>(k: K, val: (typeof v)[K]) => setV((p) => ({ ...p, [k]: val }));
   const toggle = (id: string) => set("assetIds", v.assetIds.includes(id) ? v.assetIds.filter((x) => x !== id) : [...v.assetIds, id]);
 
-  const payload = () => ({ ...v, notes: v.notes.split("\n"), expiresAt: v.expiresAt ? new Date(`${v.expiresAt}T23:59:59`).toISOString() : null });
+  const payload = () => ({ ...v, notes: v.notes.split("\n"), expiresAt: v.expiresAt ? new Date(`${v.expiresAt}T23:59:59`).toISOString() : null, invoiceId: v.downloadPolicy === "after_payment" ? v.invoiceId : null });
+  const money = (cents: number) => `$${(cents / 100).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <form
@@ -66,7 +73,7 @@ export function ShareForm({
           <label key={a.id} className={`flex items-center gap-2.5 text-[13px] ${a.hasVersion ? "text-fg-2" : "text-fg-muted"}`}>
             <input type="checkbox" checked={v.assetIds.includes(a.id)} onChange={() => toggle(a.id)} disabled={!a.hasVersion && !v.assetIds.includes(a.id)} />
             {a.title}
-            <span className="text-[12px] text-fg-muted">{a.kind === "video" ? "Video" : "Image"}{a.hasVersion ? "" : " · nothing uploaded yet"}</span>
+            <span className="text-[12px] text-fg-muted">{a.kind === "video" ? "Video" : a.kind === "document" ? "Brand guide" : "Image"}{a.hasVersion ? "" : " · nothing uploaded yet"}</span>
           </label>
         ))}
       </fieldset>
@@ -82,12 +89,32 @@ export function ShareForm({
           <input type="date" className={inputCls} value={v.expiresAt} onChange={(e) => set("expiresAt", e.target.value)} />
         </Field>
         <Field label="Downloads">
-          <select className={inputCls} value={v.downloadPolicy} onChange={(e) => set("downloadPolicy", e.target.value as typeof v.downloadPolicy)}>
+          <select
+            className={inputCls}
+            value={v.downloadPolicy}
+            onChange={(e) => {
+              const policy = e.target.value as typeof v.downloadPolicy;
+              setV((p) => ({ ...p, downloadPolicy: policy, invoiceId: policy === "after_payment" ? (p.invoiceId ?? invoices[0]?.id ?? null) : p.invoiceId }));
+            }}
+          >
             <option value="after_approval">Clean file after the client approves</option>
+            <option value="after_payment">Files after approval and the invoice is paid</option>
             <option value="none">No downloads</option>
             <option value="always">Always allow the original</option>
           </select>
         </Field>
+        {v.downloadPolicy === "after_payment" && (
+          <Field label="Invoice that unlocks the files" hint={invoices.length ? "Mark it paid on the invoice page and the files unlock on the client's next click. The watermark stays until then too." : "Issue an invoice for this client first: a draft can't unlock files."}>
+            <select className={inputCls} value={v.invoiceId ?? ""} onChange={(e) => set("invoiceId", e.target.value || null)}>
+              <option value="">Pick an invoice</option>
+              {invoices.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.number ?? "Invoice"} · {money(i.totalCents)} · {i.status === "paid" ? "paid" : "unpaid"}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         <div className="flex flex-col justify-end gap-2.5 text-[13px] text-fg-2">
           <label className="flex items-center gap-2.5">
             <input type="checkbox" checked={v.watermark} onChange={(e) => set("watermark", e.target.checked)} />

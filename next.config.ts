@@ -11,7 +11,9 @@ const REVIEW_CSP = [
   "style-src 'self' 'unsafe-inline'",
   // Next's own bootstrap is inline; dev also needs eval for React's debugging.
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
-  "connect-src 'self'",
+  // A brand guide's proof is read by pdf.js, which fetches it (planning/2026-10-31-tasset-deliverables).
+  `connect-src 'self' ${BLOB_HOST}`,
+  "worker-src 'self' blob:",
   "font-src 'self' data:",
   "object-src 'none'",
   "base-uri 'self'",
@@ -34,6 +36,8 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // The invoice logo is read from disk at runtime, so it has to ship with the server functions.
+  outputFileTracingIncludes: { "/**": ["./src/assets/invoice-logo.png"] },
   // The app is opened at 127.0.0.1. Dev HMR and client boot are blocked without this.
   allowedDevOrigins: ["127.0.0.1"],
   // Playwright uses its own output so `pnpm dev` can stay up.

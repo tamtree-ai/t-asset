@@ -1,6 +1,6 @@
 # The Tamtree contract
 
-t-asset does no processing. When the owner uploads a video, Tamtree makes everything the review room shows, and reports back over HTTP. Images (PNG or JPG only) skip Tamtree: they are ready at upload and shown from the original, with the hash and size measured by the owner's browser. The image rows in "Outputs" only apply to image files uploaded before that change. This page is what a Tamtree flow needs to implement. `scripts/fake-tamtree.ts` does all of it with ffmpeg and sharp, and is the reference to copy from.
+t-asset does no processing. When the owner uploads a video, Tamtree makes everything the review room shows, and reports back over HTTP. Images (PNG or JPG only) and brand guide PDFs skip Tamtree: the owner's browser measures the hash and size and makes the renditions itself (an image's watermarked preview and thumbnail; a guide's raster proofs), against targets from `POST /api/uploads/renditions` with the same shape as `/targets` (`browserOutputs` in `src/lib/studio/renditions.ts`). The image rows in "Outputs" are what a Tamtree image flow would make, should one be built. This page is what a Tamtree flow needs to implement. `scripts/fake-tamtree.ts` does all of it with ffmpeg and sharp, and is the reference to copy from.
 
 ## The flow, step by step
 

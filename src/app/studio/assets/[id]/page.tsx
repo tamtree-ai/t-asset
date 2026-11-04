@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 
 import { AssetSettings } from "@/components/studio/AssetForms";
 import { AutoRefresh } from "@/components/studio/AutoRefresh";
+import { Deliverables } from "@/components/studio/Deliverables";
+import { MakeWatermark } from "@/components/studio/MakeWatermark";
 import { bytesLabel, Empty, Page, quietBtn, StatusLine, Title } from "@/components/studio/kit";
 import { StudioHeader } from "@/components/studio/StudioHeader";
 import { Workspace } from "@/components/review/Workspace";
@@ -17,6 +19,8 @@ import { assetDetail } from "@/services/studio/assets";
 import { getBrand } from "@/services/studio/brand";
 import { getClient } from "@/services/studio/clients";
 import { listThreads, ownerScope } from "@/services/studio/comments";
+import { type Deliverable, listDeliverables } from "@/services/studio/deliverables";
+import { needsWatermark } from "@/services/studio/files";
 import { latestSignoffs } from "@/services/studio/room-data";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +38,8 @@ export default async function AssetPage({ params, searchParams }: { params: Prom
 
   const brand = await getBrand(member.orgId);
   const signoffs = await latestSignoffs(variations.flatMap((v) => v.versions.map((x) => x.id)));
-  const roomAssets = toOwnerView(asset, variations, signoffs);
+  const deliverables = await listDeliverables(variations.flatMap((v) => v.versions.map((x) => x.id)));
+  const roomAssets = toOwnerView(asset, variations, signoffs, deliverables);
   const scope = version ? await ownerScope(member.orgId, version.id) : null;
   const initialThreads = scope ? await listThreads(scope, { memberId: member.memberId }) : [];
   const api: ReviewApi = {
@@ -52,7 +57,7 @@ export default async function AssetPage({ params, searchParams }: { params: Prom
       <AutoRefresh active={anyPending} />
       <StudioHeader trail={[{ label: client?.name ?? "Client", href: `/studio/clients/${project.clientId}` }, { label: project.name, href: `/studio/projects/${project.id}` }, { label: asset.title }]} />
       <Page wide>
-        <Title sub={`${asset.kind === "video" ? "Video" : "Image"} · ${variations.length} ${variations.length === 1 ? "option" : "options"}`}>{asset.title}</Title>
+        <Title sub={`${asset.kind === "video" ? "Video" : asset.kind === "document" ? "Brand guide (PDF)" : "Image"} · ${variations.length} ${variations.length === 1 ? "option" : "options"}`}>{asset.title}</Title>
 
         <nav aria-label="Options" className="flex flex-wrap gap-1 border-b border-rule">
           {variations.map((v) => (
@@ -91,6 +96,7 @@ export default async function AssetPage({ params, searchParams }: { params: Prom
             )}
             {version ? (
               <>
+                {needsWatermark(version.file) && <MakeWatermark fileId={version.file.id} variationId={variation.id} />}
                 {version.file.processing !== "ready" && <ProcessingNotice fileId={version.file.id} assetId={id} state={version.file.processing} error={version.file.error} />}
                 <div className="room overflow-hidden rounded-xl" style={{ minHeight: 0 }}>
                   <style>{brandCss(brand.accentHex, "light")}</style>
@@ -115,7 +121,7 @@ export default async function AssetPage({ params, searchParams }: { params: Prom
                     <span className="text-[15px] font-semibold">v{version.number}</span>
                     <StatusLine status={version.status} />
                     <span className="text-[12.5px] text-fg-muted">
-                      {version.file.width && version.file.height ? `${version.file.width}×${version.file.height} · ` : ""}
+                      {version.file.pageCount ? `${version.file.pageCount} ${version.file.pageCount === 1 ? "page" : "pages"} · ` : version.file.width && version.file.height ? `${version.file.width}×${version.file.height} · ` : ""}
                       {bytesLabel(version.file.bytes)} · {version.file.originalName}
                     </span>
                   </div>
@@ -135,6 +141,7 @@ export default async function AssetPage({ params, searchParams }: { params: Prom
                   </div>
                 </div>
                 <ChangeNoteEditor key={version.id} versionId={version.id} note={version.changeNote} />
+                <Deliverables key={`files:${version.id}`} versionId={version.id} items={deliverables.filter((d) => d.versionId === version.id)} />
               </>
             ) : (
               <Empty title="Nothing uploaded to this option yet">Upload the first version below. Comments and approvals belong to a version.</Empty>
@@ -152,9 +159,10 @@ export default async function AssetPage({ params, searchParams }: { params: Prom
 
 /** The asset page's own data in the shape the room takes. The studio sees clean files, so nothing is marked. */
 function toOwnerView(
-  asset: { id: string; title: string; kind: "image" | "video" },
-  variations: { id: string; label: string; versions: { id: string; number: number; status: "in_review" | "changes_requested" | "approved"; changeNote: string; createdAt: Date; file: { id: string; mime: string; width: number | null; height: number | null; durationS: number | null; fpsNum: number | null; fpsDen: number | null; processing: "uploading" | "pending" | "ready" | "failed"; bytes: number; originalName: string } }[] }[],
+  asset: { id: string; title: string; kind: "image" | "video" | "document" },
+  variations: { id: string; label: string; versions: { id: string; number: number; status: "in_review" | "changes_requested" | "approved"; changeNote: string; createdAt: Date; file: { id: string; mime: string; width: number | null; height: number | null; durationS: number | null; fpsNum: number | null; fpsDen: number | null; processing: "uploading" | "pending" | "ready" | "failed"; bytes: number; originalName: string; pageCount: number | null } }[] }[],
   signoffs: Awaited<ReturnType<typeof latestSignoffs>>,
+  deliverables: Deliverable[],
 ): RoomAssetView[] {
   return [
     {
@@ -173,11 +181,12 @@ function toOwnerView(
             status: x.status,
             changeNote: x.changeNote,
             createdAt: x.createdAt.toISOString(),
-            file: { id: x.file.id, mime: x.file.mime, width: x.file.width, height: x.file.height, durationS: x.file.durationS, fpsNum: x.file.fpsNum, fpsDen: x.file.fpsDen, processing: x.file.processing, bytes: x.file.bytes, originalName: x.file.originalName },
+            file: { id: x.file.id, mime: x.file.mime, width: x.file.width, height: x.file.height, durationS: x.file.durationS, fpsNum: x.file.fpsNum, fpsDen: x.file.fpsDen, processing: x.file.processing, bytes: x.file.bytes, originalName: x.file.originalName, pageCount: x.file.pageCount },
             marked: false,
             canDownload: true,
             latest: i === all.length - 1,
             signoff: signoffs.get(x.id) ?? null,
+            deliverables: deliverables.filter((d) => d.versionId === x.id).map((d) => ({ fileId: d.fileId, label: d.label, name: d.name, ext: d.ext, bytes: d.bytes })),
           })),
         })),
     },

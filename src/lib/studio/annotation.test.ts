@@ -52,3 +52,16 @@ describe("annotation v1", () => {
     expect(readAnnotation({ v: 1, shape: "pin", x: 0.1, y: 0.2 })).toMatchObject({ x: 0.1 });
   });
 });
+
+describe("pages of a document", () => {
+  it("keeps a pin's page in range, and puts a pin with none on page 1", () => {
+    expect(parseAnnotation({ v: 1, shape: "pin", x: 0.2, y: 0.3, page: 2 }, { pageCount: 3 })).toMatchObject({ page: 2 });
+    expect(parseAnnotation({ v: 1, shape: "pin", x: 0.2, y: 0.3, page: 9 }, { pageCount: 3 })).toMatchObject({ page: 3 });
+    expect(parseAnnotation({ v: 1, shape: "rect", x: 0.2, y: 0.3, w: 0.1, h: 0.1 }, { pageCount: 3 })).toMatchObject({ page: 1 });
+  });
+  it("drops a page on an image or a video, and refuses a page that isn't a positive whole number", () => {
+    expect(parseAnnotation({ v: 1, shape: "pin", x: 0.2, y: 0.3, page: 2 })).not.toHaveProperty("page");
+    expect(() => parseAnnotation({ v: 1, shape: "pin", x: 0.2, y: 0.3, page: 0 }, { pageCount: 3 })).toThrow();
+    expect(() => parseAnnotation({ v: 1, shape: "pin", x: 0.2, y: 0.3, page: 1.5 }, { pageCount: 3 })).toThrow();
+  });
+});

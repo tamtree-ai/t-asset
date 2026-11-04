@@ -17,7 +17,7 @@ const title = z.string().trim().min(1, "Give it a title.").max(120, "Keep the ti
 const label = z.string().trim().min(1, "Give the option a name.").max(40, "Keep the option name under 40 characters.");
 
 export async function createAsset(orgId: string, projectId: string, raw: { title: string; kind: string }) {
-  const input = z.object({ title, kind: z.enum(["image", "video"]) }).parse(raw);
+  const input = z.object({ title, kind: z.enum(["image", "video", "document"]) }).parse(raw);
   if (!(await getProject(orgId, projectId))) throw new StudioError("That project was not found.");
   return db.transaction(async (tx) => {
     const [{ next }] = (await tx.select({ next: sql<number>`coalesce(max(${schema.studioAssets.sort}), -1) + 1` }).from(schema.studioAssets).where(eq(schema.studioAssets.projectId, projectId))) as [{ next: number }];

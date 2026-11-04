@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type Fps, formatTimecode, frameToTime, timeToFrame } from "@/lib/studio/timecode";
 
+import { PageBar, useProofPage } from "./DocumentStage";
 import { PinLayer } from "./PinLayer";
 import { fileUrl, type CommentView, type RoomAssetView, type RoomVersionView } from "./types";
 import { useFit } from "./useFit";
@@ -40,6 +41,7 @@ export function CompareView({
   const [mode, setMode] = useState<"side" | "slider">("side");
   const [pins, setPins] = useState(true);
   const isVideo = asset.kind === "video";
+  const isDocument = asset.kind === "document";
   const multi = asset.variations.length > 1;
 
   const resolve = (s: Side) => {
@@ -103,7 +105,7 @@ export function CompareView({
         <span className="flex-1" />
         {picker("Left", a, setA)}
         {picker("Right", b, setB)}
-        {!isVideo && (
+        {!isVideo && !isDocument && (
           <div role="tablist" aria-label="Compare mode" className="flex gap-1">
             {(["side", "slider"] as const).map((m) => (
               <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={`h-8 rounded-lg px-3 text-[13px] ${mode === m ? "bg-brand font-semibold text-brand-ink" : "border border-room-line hover:bg-room-raised"}`}>
@@ -118,7 +120,9 @@ export function CompareView({
         </label>
       </header>
 
-      {isVideo ? (
+      {isDocument ? (
+        <CompareDocuments token={token} a={A.version} b={B.version} labelA={label(A.variation, A.version, multi)} labelB={label(B.variation, B.version, multi)} threadsA={pins ? threadsA : []} threadsB={pins ? threadsB : []} />
+      ) : isVideo ? (
         <CompareVideos token={token} a={A.version} b={B.version} labelA={label(A.variation, A.version, false)} labelB={label(B.variation, B.version, false)} threadsA={pins ? threadsA : []} threadsB={pins ? threadsB : []} />
       ) : mode === "slider" ? (
         <SliderCompare token={token} a={A.version} b={B.version} labelA={label(A.variation, A.version, multi)} labelB={label(B.variation, B.version, multi)} />
@@ -146,6 +150,63 @@ function ImagePane({ token, version, title, threads }: { token: string; version:
             <img src={fileUrl("client", token, version.file.id, "preview")} alt={title} className="size-full shadow-[0_2px_24px_rgb(0_0_0/0.12)]" draggable={false} />
             <PinLayer threads={threads} activeId={null} onActivate={noop} onHover={noop} draft={null} capturing={false} time={null} onPlace={noop} />
           </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Two versions of a brand guide on the same page, turned together. */
+function CompareDocuments({ token, a, b, labelA, labelB, threadsA, threadsB }: { token: string; a: RoomVersionView; b: RoomVersionView; labelA: string; labelB: string; threadsA: CommentView[]; threadsB: CommentView[] }) {
+  const [page, setPage] = useState(1);
+  const pages = Math.max(a.file.pageCount ?? 1, b.file.pageCount ?? 1);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (e.key === "ArrowLeft" || e.key === "PageUp") setPage((n) => Math.max(1, n - 1));
+      else if (e.key === "ArrowRight" || e.key === "PageDown") setPage((n) => Math.min(pages, n + 1));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pages]);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-px bg-room-line md:grid-cols-2">
+        <DocumentPane token={token} version={a} title={labelA} page={page} threads={threadsA} />
+        <DocumentPane token={token} version={b} title={labelB} page={page} threads={threadsB} />
+      </div>
+      {pages > 1 && (
+        <div className="flex justify-center border-t border-room-line bg-room-surface px-4 py-2">
+          <PageBar page={page} pages={pages} onPage={setPage} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocumentPane({ token, version, title, page, threads }: { token: string; version: RoomVersionView; title: string; page: number; threads: CommentView[] }) {
+  const frame = useRef<HTMLDivElement>(null);
+  const beyond = page > (version.file.pageCount ?? 1);
+  const { shown, error } = useProofPage(fileUrl("client", token, version.file.id, "preview"), page);
+  const fit = useFit(frame, shown ? shown.w / shown.h : 1 / Math.SQRT2);
+  const onPage = threads.filter((t) => t.annotation?.page === page);
+  return (
+    <section className="flex min-h-[260px] min-w-0 flex-col bg-room-bg" aria-label={title}>
+      <h2 className="px-4 py-2 text-[13px] font-semibold">{title}</h2>
+      <div ref={frame} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2">
+        {beyond ? (
+          <p className="text-[13px] text-room-muted">This version has {version.file.pageCount ?? 1} pages.</p>
+        ) : error ? (
+          <p className="text-[13px] text-room-muted">{error}</p>
+        ) : (
+          shown &&
+          fit.w > 0 && (
+            <div className="relative" style={{ width: fit.w, height: fit.h }}>
+              <img src={shown.url} alt={`${title}, page ${shown.page}`} className="size-full shadow-[0_2px_24px_rgb(0_0_0/0.12)]" draggable={false} />
+              <PinLayer threads={onPage} activeId={null} onActivate={noop} onHover={noop} draft={null} capturing={false} time={null} onPlace={noop} />
+            </div>
+          )
         )}
       </div>
     </section>

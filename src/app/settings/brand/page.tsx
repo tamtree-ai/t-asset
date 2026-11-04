@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Page, Title } from "@/components/studio/kit";
 import { StudioHeader } from "@/components/studio/StudioHeader";
 import { getCurrentMember } from "@/lib/auth";
@@ -21,7 +23,19 @@ export default async function BrandPage() {
     <>
       <StudioHeader trail={[{ label: "Brand" }]} />
       <Page wide>
-        <Title sub="Your name and one accent colour carry through the review room your clients see.">Brand</Title>
+        <Title
+          sub={
+            <>
+              Your name and one accent colour carry through the review room your clients see. The invoice logo, ABN, address and bank details are in{" "}
+              <Link href="/settings/invoicing" className="underline hover:text-fg">
+                Invoicing settings
+              </Link>
+              .
+            </>
+          }
+        >
+          Brand
+        </Title>
         <BrandForm brand={{ studioName: brand.studioName, accentHex: brand.accentHex, roomTheme: brand.roomTheme, website: brand.website ?? "", supportEmail: brand.supportEmail ?? "" }} />
       </Page>
     </>

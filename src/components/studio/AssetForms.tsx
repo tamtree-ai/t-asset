@@ -14,7 +14,7 @@ export function NewAssetForm({ projectId }: { projectId: string }) {
   const { run, error, pending } = useRunner();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
-  const [kind, setKind] = useState<"image" | "video">("image");
+  const [kind, setKind] = useState<"image" | "video" | "document">("image");
   return (
     <>
       <button type="button" className={primaryBtn} onClick={() => setOpen(true)}>
@@ -31,12 +31,12 @@ export function NewAssetForm({ projectId }: { projectId: string }) {
           <Field label="Title">
             <input autoFocus className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Instagram banner 1080×1350" />
           </Field>
-          <fieldset className="flex gap-4 text-[13px] text-fg-2">
+          <fieldset className="flex flex-wrap gap-x-4 gap-y-2 text-[13px] text-fg-2">
             <legend className="mb-1.5 text-[12.5px] text-fg-3">What is it?</legend>
-            {(["image", "video"] as const).map((k) => (
+            {(["image", "video", "document"] as const).map((k) => (
               <label key={k} className="flex items-center gap-2">
                 <input type="radio" name="kind" checked={kind === k} onChange={() => setKind(k)} />
-                {k === "image" ? "Image (banner, poster, logo)" : "Video"}
+                {k === "image" ? "Image (banner, poster, logo)" : k === "video" ? "Video" : "Brand guide (PDF)"}
               </label>
             ))}
           </fieldset>

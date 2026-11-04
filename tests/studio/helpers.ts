@@ -32,7 +32,7 @@ export async function setup(label: string) {
     return { orgId: o!.id, memberId: member!.id, email: member!.email };
   }
 
-  async function tree(orgId: string, kind: "image" | "video" = "image", names: { client?: string; project?: string; asset?: string } = {}) {
+  async function tree(orgId: string, kind: "image" | "video" | "document" = "image", names: { client?: string; project?: string; asset?: string } = {}) {
     const [client] = await db.insert(schema.studioClients).values({ orgId, name: names.client ?? "Acme" }).returning();
     const [project] = await db.insert(schema.studioProjects).values({ orgId, clientId: client!.id, name: names.project ?? "Spring", roundsIncluded: 2 }).returning();
     const [asset] = await db.insert(schema.studioAssets).values({ projectId: project!.id, title: names.asset ?? "Banner", kind }).returning();
@@ -88,6 +88,7 @@ export async function setup(label: string) {
   async function cleanup() {
     // Versions point at files with no cascade, so the trees go first; then the orgs take everything else.
     if (orgIds.length) {
+      await db.delete(schema.studioInvoices).where(inArray(schema.studioInvoices.orgId, orgIds));
       await db.delete(schema.studioClients).where(inArray(schema.studioClients.orgId, orgIds));
       for (const id of orgIds) await db.delete(schema.orgs).where(eq(schema.orgs.id, id));
     }

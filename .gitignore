@@ -13,3 +13,14 @@ e2e/.auth/
 test-results/
 playwright-report/
 .DS_Store
+
+# pnpm invoice: real invoices and studio details stay local; the examples are committed.
+/invoices/*
+!/invoices/*.example.json
+!/invoices/README.md
+
+# start.sh / stop.sh logs and PIDs
+.run/
+
+# Real invoices rendered locally (client documents)
+/Invoice *.pdf

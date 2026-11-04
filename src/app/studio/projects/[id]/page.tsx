@@ -38,7 +38,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           </Title>
           <div className="flex items-center gap-2.5">
             <StatusLine status={overview.status} />
-            <ProjectActions projectId={id} canShare={assets.some((a) => a.latest)} />
+            <ProjectActions projectId={id} canShare={assets.some((a) => a.latest)} invoiceFor={member.role === "owner" ? client.id : undefined} />
           </div>
         </div>
 
@@ -80,7 +80,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                     <div className="flex flex-col gap-1.5 p-3">
                       <span className="truncate text-[13.5px] font-medium">{a.title}</span>
                       <span className="text-[12px] text-fg-muted">
-                        {a.kind === "video" ? "Video" : "Image"} · {a.variationCount} {a.variationCount === 1 ? "option" : "options"}
+                        {a.kind === "video" ? "Video" : a.kind === "document" ? "Brand guide" : "Image"} · {a.variationCount} {a.variationCount === 1 ? "option" : "options"}
                         {a.latest ? ` · v${a.latest.number}` : ""}
                       </span>
                       <StatusLine status={a.status} />

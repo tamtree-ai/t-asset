@@ -20,10 +20,14 @@ export function getBlobStore(): BlobStore {
   return g.__tassetBlob;
 }
 
-/** The local store, or null when the app runs on Vercel Blob (the dev route answers 404 then). */
+/**
+ * The local store, or null when the app runs on Vercel Blob (the dev route answers 404 then).
+ * Checks `driver`, not `instanceof`: the store lives on `globalThis`, and after a dev hot reload
+ * the route's `LocalBlobStore` is a new class, so `instanceof` failed and every blob read 404'd.
+ */
 export function localBlobStore(): LocalBlobStore | null {
   const store = getBlobStore();
-  return store instanceof LocalBlobStore ? store : null;
+  return store.driver === "local" ? (store as LocalBlobStore) : null;
 }
 
 /** Tests swap in their own store. */

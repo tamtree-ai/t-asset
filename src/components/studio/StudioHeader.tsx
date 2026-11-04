@@ -27,6 +27,9 @@ export async function StudioHeader({ trail, trailing }: { trail: Crumb[]; traili
               {bytesLabel(used.bytes)} of {bytesLabel(used.capBytes)}
             </span>
           </span>
+          <Link href="/studio/queue" className="rounded-md px-2 py-1 text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
+            Drafts to review
+          </Link>
           {member.role === "owner" && (
             <Link href="/studio/invoices" className="rounded-md px-2 py-1 text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
               Invoices

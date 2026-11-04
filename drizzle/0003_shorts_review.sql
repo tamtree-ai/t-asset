@@ -1,0 +1,2 @@
+ALTER TABLE "studio_versions" ADD COLUMN "released_at" timestamp with time zone DEFAULT now();--> statement-breakpoint
+ALTER TABLE "studio_versions" ADD COLUMN "meta" jsonb DEFAULT '{}'::jsonb NOT NULL;

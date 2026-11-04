@@ -132,6 +132,9 @@ export type VersionView = {
   file: typeof schema.studioFiles.$inferSelect;
   openComments: number;
   totalComments: number;
+  /** Null: internal, the client can't see it yet. */
+  releasedAt: Date | null;
+  meta: (typeof schema.studioVersions.$inferSelect)["meta"];
 };
 
 /** The asset page: variations as tabs, each with its version stack (newest first) and comment counts. */
@@ -177,6 +180,8 @@ export async function assetDetail(orgId: string, assetId: string) {
           file: r.file,
           openComments: Number(byVersion.get(r.version.id)?.open ?? 0),
           totalComments: Number(byVersion.get(r.version.id)?.total ?? 0),
+          releasedAt: r.version.releasedAt,
+          meta: r.version.meta,
         })),
     })),
   };

@@ -22,6 +22,13 @@
       "when": 1793427547631,
       "tag": "0002_deliverables",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793793452515,
+      "tag": "0003_shorts_review",
+      "breakpoints": true
     }
   ]
 }

@@ -65,6 +65,8 @@ export const studioRoomTheme = pgEnum("studio_room_theme", ["light", "dark", "au
 export const studioProjectStatus = pgEnum("studio_project_status", ["active", "paused", "delivered"]);
 export const studioAssetKind = pgEnum("studio_asset_kind", ["image", "video", "document"]);
 export const studioVersionStatus = pgEnum("studio_version_status", ["in_review", "changes_requested", "approved"]);
+/** Notes on a version from whatever made it. A short cut by the shorts pipeline sets all of these. */
+export type VersionMeta = { source?: "upload" | "shorts"; why?: string; hook?: string; closing?: string; durationS?: number; shortId?: string };
 /** `uploading`: the browser is still sending the original. `pending`: Tamtree is making the renditions. */
 export const studioProcessing = pgEnum("studio_processing", ["uploading", "pending", "ready", "failed"]);
 export const studioDownloadPolicy = pgEnum("studio_download_policy", ["none", "after_approval", "always", "after_payment"]);
@@ -217,6 +219,14 @@ export const studioVersions = pgTable(
     status: studioVersionStatus("status").notNull().default("in_review"),
     createdBy: uuid("created_by").references(() => members.id, { onDelete: "set null" }),
     createdAt: createdAt(),
+    /**
+     * When guests may see this version. Null = internal: only the studio sees it, comments on it
+     * and gets new versions of it (agent drafts start here); the owner releases it to the client.
+     * An owner's own upload is released at once (the default).
+     */
+    releasedAt: timestamp("released_at", { withTimezone: true }).defaultNow(),
+    /** What made it and why, for the reviewer. */
+    meta: jsonb("meta").$type<VersionMeta>().notNull().default({}),
   },
   (t) => [uniqueIndex("studio_versions_variation_number").on(t.variationId, t.number)],
 );

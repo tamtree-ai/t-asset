@@ -9,6 +9,7 @@ export type EventType =
   | "share.created"
   | "share.revoked"
   | "version.uploaded"
+  | "version.released"
   | "comment.added"
   | "comment.replied"
   | "comment.resolved"
@@ -54,6 +55,8 @@ export function describeEvent(e: { type: string; actorLabel: string; payload: Re
       return `${e.actorLabel} opened the review link`;
     case "version.uploaded":
       return `${e.actorLabel} uploaded${where}`;
+    case "version.released":
+      return `${e.actorLabel} released to the client: ${typeof p.where === "string" ? p.where : "versions"}`;
     case "comment.added":
       return `${e.actorLabel} commented${where}`;
     case "comment.replied":

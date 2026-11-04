@@ -10,6 +10,7 @@ import { listDeliverables } from "@/services/studio/deliverables";
 import { guestState } from "@/services/studio/guest";
 import { getProject, projectRounds } from "@/services/studio/projects";
 import { initialSelection, latestSignoffs, projectClientName, toView } from "@/services/studio/room-data";
+import { shareHasDrafts } from "@/services/studio/release";
 import { loadShareContent, shareInvoice } from "@/services/studio/room";
 import { commentAction, decideAction, deleteAction, editAction, replyAction, resolveAction, threadsAction } from "./actions";
 
@@ -33,7 +34,10 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
   const { share, reviewer } = g;
   await touchReviewer(reviewer.id);
   const content = await loadShareContent(share);
-  if (content.length === 0) return <Ended token={token} studioName={brand.studioName} hasLogo={hasLogo} supportEmail={brand.supportEmail} website={brand.website} reason="revoked" />;
+  if (content.length === 0) {
+    const reason = (await shareHasDrafts(share.id)) ? "waiting" : "revoked";
+    return <Ended token={token} studioName={brand.studioName} hasLogo={hasLogo} supportEmail={brand.supportEmail} website={brand.website} reason={reason} />;
+  }
 
   const versionIds = content.flatMap((a) => a.variations.flatMap((v) => v.versions.map((x) => x.id)));
   const [signoffs, project, deliverables, invoice] = await Promise.all([

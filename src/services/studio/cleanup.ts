@@ -1,6 +1,6 @@
 /**
  * The daily cleanup (plan §5.7), run by Vercel cron. Hobby allows one run a day, so each step is
- * safe to skip a day: uploads abandoned for 24 hours go, failed blob deletes are tried again, and
+ * safe to skip a day: uploads abandoned for 24 hours go (with a Review API version made for one), failed blob deletes are tried again, and
  * files Tamtree hasn't picked up in 2 hours get a fresh webhook.
  */
 import "server-only";
@@ -22,6 +22,8 @@ export async function cleanup(now = new Date(), notify: (fileId: string) => Prom
     .where(and(eq(f.processing, "uploading"), lt(f.createdAt, new Date(now.getTime() - 24 * 3600_000))))
     .limit(200);
   for (const row of abandoned) {
+    // A Review API version is made before its bytes arrive; one never completed goes with its file.
+    await db.delete(schema.studioVersions).where(eq(schema.studioVersions.fileId, row.id));
     await db.delete(f).where(eq(f.id, row.id));
     await deleteBlobs(keysOf(row));
   }

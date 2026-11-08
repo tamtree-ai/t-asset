@@ -407,7 +407,74 @@ export const studioEvents = pgTable(
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
     createdAt: createdAt(),
   },
-  (t) => [index("studio_events_project").on(t.projectId, t.createdAt), index("studio_events_share").on(t.shareId, t.createdAt)],
+  (t) => [
+    index("studio_events_project").on(t.projectId, t.createdAt),
+    index("studio_events_share").on(t.shareId, t.createdAt),
+    // The hooks pull feed reads an org's newest events of a few types.
+    index("studio_events_org").on(t.orgId, t.createdAt),
+  ],
+);
+
+// ── Hooks ──────────────────────────────────────────────────────────────────
+// planning/2026-10-07-tasset-workflow-hooks §5.1, adopted by planning/2026-11-08-review-loop §3.
+// `studio_events` is the outbox: a push hook gets one delivery row per event it wants.
+export const hookMode = pgEnum("hook_mode", ["push", "pull"]);
+export const hookDeliveryStatus = pgEnum("hook_delivery_status", ["pending", "delivered", "failed"]);
+
+/** Any HTTPS endpoint (tamshoot, Tamtree, a customer's tool) told about studio events. At most 10 per studio. */
+export const hookSubscriptions = pgTable(
+  "hook_subscriptions",
+  {
+    id: id(),
+    orgId: uuid("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    mode: hookMode("mode").notNull(),
+    /** Catalogue types (services/hooks/catalogue.ts); never empty. */
+    events: text("events").array().notNull(),
+    /** Push: where to POST, https only outside dev. */
+    url: text("url"),
+    /** Push: the signing secret, AES-GCM with STUDIO_SECRET (lib/studio/crypto.ts). */
+    secretEnc: text("secret_enc"),
+    /** Pull: sha256 of the feed bearer token. */
+    feedTokenHash: text("feed_token_hash").unique(),
+    /** The last 4 characters of the secret or token, shown after creation. */
+    credentialHint: text("credential_hint"),
+    enabled: boolean("enabled").notNull().default(true),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+    lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+    /** Short; never contains the secret. */
+    lastError: text("last_error"),
+    lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("hook_subscriptions_org").on(t.orgId),
+    check("hook_subscriptions_events_nonempty", sql`cardinality(${t.events}) > 0`),
+    check("hook_subscriptions_push_url", sql`${t.mode} <> 'push' or (${t.url} is not null and ${t.secretEnc} is not null)`),
+    check("hook_subscriptions_pull_token", sql`${t.mode} <> 'pull' or ${t.feedTokenHash} is not null`),
+  ],
+);
+
+/** One push of one event to one hook. Retried 1 h, 6 h, 24 h after a retryable failure, then `failed`. */
+export const hookDeliveries = pgTable(
+  "hook_deliveries",
+  {
+    eventId: uuid("event_id").notNull().references(() => studioEvents.id, { onDelete: "cascade" }),
+    subscriptionId: uuid("subscription_id").notNull().references(() => hookSubscriptions.id, { onDelete: "cascade" }),
+    status: hookDeliveryStatus("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastHttpStatus: integer("last_http_status"),
+    lastError: text("last_error"),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.eventId, t.subscriptionId] }),
+    index("hook_deliveries_due").on(t.status, t.nextAttemptAt),
+    index("hook_deliveries_subscription").on(t.subscriptionId, t.createdAt),
+  ],
 );
 
 /**

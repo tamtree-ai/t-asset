@@ -88,9 +88,12 @@ The owner reads the message next to a Retry button, so write it for them.
 
 ## Webhook signature
 
-Headers:
-- `x-tasset-timestamp`: Unix seconds
-- `x-tasset-signature`: `sha256=<hex>`, the HMAC-SHA256 of `<timestamp>.<raw body>` keyed with `TAMTREE_WEBHOOK_SECRET`
+Headers (two pairs, the same values):
+- `x-tamtree-timestamp` and `x-tasset-timestamp`: Unix seconds
+- `x-tamtree-signature` and `x-tasset-signature`: `sha256=<hex>`, the HMAC-SHA256 of `<timestamp>.<raw body>` keyed with `TAMTREE_WEBHOOK_SECRET`
+
+The `x-tamtree-*` pair is what a Tamtree Webhook Trigger reads with Verify sender set to Signed, so the trigger checks
+it with no code step. The `x-tasset-*` pair stays for flows built before 2026-11-09.
 
 Refuse a bad signature, or a timestamp more than 5 minutes off. `verifyWebhook` in `src/lib/tamtree.ts` does exactly this.
 

@@ -20,6 +20,8 @@ beforeAll(async () => {
   cleanup = (await import("@/services/studio/cleanup")).cleanup;
 });
 afterAll(async () => c.cleanup());
+// The hook sweep has its own tests (hooks.test.ts); here it would send other files' deliveries.
+const noHooks = async () => ({ sent: 0, delivered: 0, pruned: 0 });
 
 describe("cleanup", () => {
   it("removes uploads abandoned for a day, with their blobs, and leaves fresh ones", async () => {
@@ -30,7 +32,7 @@ describe("cleanup", () => {
       { id: old, orgId: org.orgId, originalKey: `o/${old}/a.png`, originalName: "a.png", mime: "image/png", bytes: 10, processing: "uploading", createdAt: new Date(Date.now() - 25 * HOUR) },
       { id: fresh, orgId: org.orgId, originalKey: `o/${fresh}/b.png`, originalName: "b.png", mime: "image/png", bytes: 10, processing: "uploading" },
     ]);
-    const r = await cleanup(new Date(), async () => true);
+    const r = await cleanup(new Date(), async () => true, noHooks);
     expect(r.abandonedUploads).toBeGreaterThanOrEqual(1);
     expect(await c.db.select().from(c.schema.studioFiles).where(eq(c.schema.studioFiles.id, old))).toHaveLength(0);
     expect(await c.db.select().from(c.schema.studioFiles).where(eq(c.schema.studioFiles.id, fresh))).toHaveLength(1);
@@ -41,7 +43,7 @@ describe("cleanup", () => {
     const key = `d/${randomUUID()}/orphan.webp`;
     await c.put(key, "x", "image/webp");
     await c.db.insert(c.schema.deletedBlobs).values({ key });
-    await cleanup(new Date(), async () => true);
+    await cleanup(new Date(), async () => true, noHooks);
     expect(await c.store.head(key)).toBeNull();
     expect(await c.db.select().from(c.schema.deletedBlobs).where(eq(c.schema.deletedBlobs.key, key))).toHaveLength(0);
   });
@@ -53,10 +55,14 @@ describe("cleanup", () => {
     await c.db.update(c.schema.studioFiles).set({ processing: "pending", createdAt: new Date(Date.now() - 3 * HOUR) }).where(eq(c.schema.studioFiles.id, waiting.fileId));
     await c.db.update(c.schema.studioFiles).set({ processing: "pending" }).where(eq(c.schema.studioFiles.id, recent.fileId));
     const told: string[] = [];
-    await cleanup(new Date(), async (id) => {
-      told.push(id);
-      return true;
-    });
+    await cleanup(
+      new Date(),
+      async (id) => {
+        told.push(id);
+        return true;
+      },
+      noHooks,
+    );
     expect(told).toContain(waiting.fileId);
     expect(told).not.toContain(recent.fileId);
   });

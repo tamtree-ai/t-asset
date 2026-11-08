@@ -12,6 +12,7 @@ const PUBLIC = [
   /^\/api\/health$/,
   /^\/api\/tamtree(\/|$)/, // Tamtree: bearer token, checked per request
   /^\/api\/v1(\/|$)/, // Review API: tt_live_ bearer token, checked per request
+  /^\/api\/hooks\/(redeliver|[0-9a-f-]{36}\/events)$/, // hooks: TAMTREE_API_TOKEN or a feed token, checked per request
   /^\/api\/cron(\/|$)/, // Vercel cron: CRON_SECRET, checked per request
   /^\/api\/dev-blob(\/|$)/, // local blob driver: signed URLs, 404 on Vercel Blob
 ];

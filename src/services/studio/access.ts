@@ -115,10 +115,32 @@ export async function identify(share: ShareRow, sessionId: string, input: { name
   } else {
     const [created] = await db.insert(schema.studioReviewers).values({ shareId: share.id, name, email, lastSeenAt: new Date() }).returning();
     reviewer = created!;
-    await logEvent({ orgId: share.orgId, projectId: share.projectId, shareId: share.id, actorLabel: name, type: "reviewer.joined" });
+    await logEvent({ orgId: share.orgId, projectId: share.projectId, shareId: share.id, actorLabel: name, type: "reviewer.joined", payload: { reviewerId: reviewer.id } });
   }
   await db.update(schema.studioShareSessions).set({ reviewerId: reviewer.id }).where(eq(schema.studioShareSessions.id, sessionId));
+  // Every sign-in, new or returning, at most once per person per 30 minutes (a reload loop or a shared office computer).
+  if (!(await openedRecently(share.id, reviewer.id))) {
+    await logEvent({ orgId: share.orgId, projectId: share.projectId, shareId: share.id, actorLabel: name, type: "share.opened", payload: { reviewerId: reviewer.id, firstVisit: !existing } });
+  }
   return reviewer;
+}
+
+export const SHARE_OPENED_THROTTLE_MS = 30 * 60_000;
+
+async function openedRecently(shareId: string, reviewerId: string, now = Date.now()): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.studioEvents.id })
+    .from(schema.studioEvents)
+    .where(
+      and(
+        eq(schema.studioEvents.shareId, shareId),
+        gt(schema.studioEvents.createdAt, new Date(now - SHARE_OPENED_THROTTLE_MS)),
+        eq(schema.studioEvents.type, "share.opened"),
+        sql`${schema.studioEvents.payload}->>'reviewerId' = ${reviewerId}`,
+      ),
+    )
+    .limit(1);
+  return !!row;
 }
 
 export async function touchReviewer(reviewerId: string): Promise<void> {

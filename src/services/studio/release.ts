@@ -82,7 +82,7 @@ export async function releaseVersions(orgId: string, versionIds: string[]): Prom
   await db.update(schema.studioVersions).set({ releasedAt: new Date() }).where(inArray(schema.studioVersions.id, owned.map((o) => o.id)));
   for (const projectId of new Set(owned.map((o) => o.projectId))) {
     const these = owned.filter((o) => o.projectId === projectId);
-    await logEvent({ orgId, projectId, actorLabel: "You", type: "version.released", payload: { where: these.map((o) => `${o.title} v${o.number}`).join(", "), count: these.length } });
+    await logEvent({ orgId, projectId, actorLabel: "You", type: "version.released", payload: { where: these.map((o) => `${o.title} v${o.number}`).join(", "), count: these.length, versionIds: these.map((o) => o.id) } });
   }
   return owned.length;
 }

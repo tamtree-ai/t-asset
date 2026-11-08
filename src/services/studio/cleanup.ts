@@ -1,7 +1,7 @@
 /**
  * The daily cleanup (plan §5.7), run by Vercel cron. Hobby allows one run a day, so each step is
  * safe to skip a day: uploads abandoned for 24 hours go (with a Review API version made for one), failed blob deletes are tried again, and
- * files Tamtree hasn't picked up in 2 hours get a fresh webhook.
+ * files Tamtree hasn't picked up in 2 hours get a fresh webhook, and hook deliveries due a retry are sent.
  */
 import "server-only";
 
@@ -11,9 +11,10 @@ import { db, schema } from "@/db";
 import { getBlobStore } from "@/lib/blob";
 
 import { deleteBlobs, keysOf } from "./files";
+import { sweepDeliveries } from "../hooks/deliver";
 import { CLAIM_TTL_MS, notifyTamtree } from "./tamtree";
 
-export async function cleanup(now = new Date(), notify: (fileId: string) => Promise<boolean> = notifyTamtree) {
+export async function cleanup(now = new Date(), notify: (fileId: string) => Promise<boolean> = notifyTamtree, sweepHooks: (now: Date) => Promise<{ sent: number; delivered: number; pruned: number }> = sweepDeliveries) {
   const f = schema.studioFiles;
 
   const abandoned = await db
@@ -49,5 +50,13 @@ export async function cleanup(now = new Date(), notify: (fileId: string) => Prom
   let renotified = 0;
   for (const w of waiting) if (await notify(w.id)) renotified++;
 
-  return { abandonedUploads: abandoned.length, blobDeletesRetried: retried, renotified, stillWaiting: waiting.length };
+  // Hook deliveries that are due a retry (1 h, 6 h, 24 h after a failure): on Vercel Hobby, at most a day late.
+  let hooks = { sent: 0, delivered: 0, pruned: 0 };
+  try {
+    hooks = await sweepHooks(now);
+  } catch (e) {
+    console.error("[cleanup] hook sweep failed", e);
+  }
+
+  return { abandonedUploads: abandoned.length, blobDeletesRetried: retried, renotified, stillWaiting: waiting.length, hooks };
 }

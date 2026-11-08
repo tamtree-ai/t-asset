@@ -1,9 +1,15 @@
-/** The activity log (plan §5.2). Written by every service that changes something a client or the studio should see; the notifier batches from it. */
+/**
+ * The activity log (plan §5.2). Written by every service that changes something a client or the
+ * studio should see. It is also the hooks outbox: an event a push hook wants is queued for it and
+ * sent after the response (services/hooks/deliver.ts).
+ */
 import "server-only";
 
 import { and, desc, eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+
+import { dispatchAfterResponse, queueDeliveries } from "../hooks/deliver";
 
 export type EventType =
   | "share.created"
@@ -24,15 +30,31 @@ export type EventType =
   | "invoice.paid"
   | "invoice.unpaid"
   | "invoice.voided"
-  | "file.downloaded";
+  | "file.downloaded"
+  | "file.ready"
+  | "file.failed"
+  | "owner.signed_in"
+  | "test.ping";
 
-type Db = Pick<typeof db, "insert">;
+type Db = Pick<typeof db, "insert" | "select">;
 
+/**
+ * Records the event and returns its id. Given a transaction (`conn`), the hook deliveries go in the
+ * same transaction and are sent after the response, so after the commit. `dispatch: false` leaves
+ * them for the sweep.
+ */
 export async function logEvent(
   e: { orgId: string; projectId?: string | null; shareId?: string | null; actorLabel: string; type: EventType; payload?: Record<string, unknown> },
   conn: Db = db,
-): Promise<void> {
-  await conn.insert(schema.studioEvents).values({ orgId: e.orgId, projectId: e.projectId ?? null, shareId: e.shareId ?? null, actorLabel: e.actorLabel, type: e.type, payload: e.payload ?? {} });
+  opts: { dispatch?: boolean } = {},
+): Promise<string> {
+  const [row] = await conn
+    .insert(schema.studioEvents)
+    .values({ orgId: e.orgId, projectId: e.projectId ?? null, shareId: e.shareId ?? null, actorLabel: e.actorLabel, type: e.type, payload: e.payload ?? {} })
+    .returning({ id: schema.studioEvents.id });
+  const keys = await queueDeliveries({ id: row!.id, orgId: e.orgId, type: e.type }, conn);
+  if (opts.dispatch !== false) dispatchAfterResponse(keys);
+  return row!.id;
 }
 
 export async function listEvents(orgId: string, scope: { projectId?: string; shareId?: string }, limit = 50) {
@@ -85,6 +107,14 @@ export function describeEvent(e: { type: string; actorLabel: string; payload: Re
       return `${e.actorLabel} downloaded ${typeof p.label === "string" && p.label ? `“${p.label}”` : typeof p.file === "string" ? p.file : "a file"}${where}`;
     case "reviewer.joined":
       return `${e.actorLabel} joined the review`;
+    case "file.ready":
+      return `${e.actorLabel} finished processing${where}`;
+    case "file.failed":
+      return `${e.actorLabel} couldn’t process${where}`;
+    case "owner.signed_in":
+      return `${e.actorLabel} signed in to the studio`;
+    case "test.ping":
+      return `${e.actorLabel} sent a test to the hook${typeof p.hook === "string" ? ` “${p.hook}”` : ""}`;
     default:
       return `${e.actorLabel}: ${e.type}`;
   }

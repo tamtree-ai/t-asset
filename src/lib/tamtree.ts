@@ -45,6 +45,15 @@ export function signWebhook(secret: string, timestamp: number, body: string): st
   return `sha256=${createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex")}`;
 }
 
+/** Tamtree's Webhook Trigger ("Signed") reads `X-Tamtree-*`; older Tamtree flows read `x-tasset-*`. Both carry the same signature. */
+export const TAMTREE_SIGNATURE_HEADER = "x-tamtree-signature";
+export const TAMTREE_TIMESTAMP_HEADER = "x-tamtree-timestamp";
+
+export function signatureHeaders(secret: string, timestamp: number, body: string): Record<string, string> {
+  const sig = signWebhook(secret, timestamp, body);
+  return { [TIMESTAMP_HEADER]: String(timestamp), [SIGNATURE_HEADER]: sig, [TAMTREE_TIMESTAMP_HEADER]: String(timestamp), [TAMTREE_SIGNATURE_HEADER]: sig };
+}
+
 /** What Tamtree's side should do with a delivery: refuse a bad signature or one more than 5 minutes old. */
 export function verifyWebhook(secret: string, timestamp: string | null, body: string, signature: string | null, now = Date.now()): boolean {
   const ts = Number(timestamp);

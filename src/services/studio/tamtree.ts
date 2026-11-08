@@ -13,8 +13,9 @@ import { db, schema } from "@/db";
 import { getBlobStore, type UploadTarget } from "@/lib/blob";
 import { studioEnv } from "@/lib/studio/env";
 import { watermarkText } from "@/lib/studio/watermark";
-import { type OutputName, type OutputSpec, outputsFor, signWebhook, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@/lib/tamtree";
+import { type OutputName, type OutputSpec, outputsFor, signatureHeaders } from "@/lib/tamtree";
 
+import { logEvent } from "./events";
 import { deleteBlobs } from "./files";
 import { storageUsed } from "./storage";
 
@@ -67,7 +68,7 @@ export async function notifyTamtree(fileId: string, fetcher: typeof fetch = fetc
     const ts = Math.floor(Date.now() / 1000);
     const res = await fetcher(tamtree.webhookUrl, {
       method: "POST",
-      headers: { "content-type": "application/json", [TIMESTAMP_HEADER]: String(ts), [SIGNATURE_HEADER]: signWebhook(tamtree.webhookSecret, ts, body) },
+      headers: { "content-type": "application/json", ...signatureHeaders(tamtree.webhookSecret, ts, body) },
       body,
       signal: AbortSignal.timeout(10_000),
     });
@@ -211,6 +212,7 @@ export async function complete(fileId: string, raw: unknown) {
     .returning({ id: schema.studioFiles.id });
   if (updated.length === 0) return complete(fileId, raw); // raced with another completion: answer as that one did
   if (dropOriginal) await deleteBlobs([f.originalKey!]);
+  await logFileEvent(fileId, "file.ready");
   return { fileId, state: "ready" as const, alreadyDone: false };
 }
 
@@ -229,7 +231,22 @@ export async function fail(fileId: string, raw: unknown) {
     .update(schema.studioFiles)
     .set({ processing: requeue ? "pending" : "failed", error: input.message, claimedAt: null })
     .where(eq(schema.studioFiles.id, fileId));
+  if (!requeue) await logFileEvent(fileId, "file.failed", { error: input.message });
   return { fileId, state: requeue ? ("pending" as const) : ("failed" as const) };
+}
+
+/** `file.ready` / `file.failed` for the version that holds the file. A file no version holds (a deliverable) logs nothing. */
+async function logFileEvent(fileId: string, type: "file.ready" | "file.failed", extra: Record<string, unknown> = {}) {
+  const [v] = await db
+    .select({ versionId: schema.studioVersions.id, number: schema.studioVersions.number, label: schema.studioVariations.label, title: schema.studioAssets.title, projectId: schema.studioProjects.id, orgId: schema.studioProjects.orgId })
+    .from(schema.studioVersions)
+    .innerJoin(schema.studioVariations, eq(schema.studioVariations.id, schema.studioVersions.variationId))
+    .innerJoin(schema.studioAssets, eq(schema.studioAssets.id, schema.studioVariations.assetId))
+    .innerJoin(schema.studioProjects, eq(schema.studioProjects.id, schema.studioAssets.projectId))
+    .where(eq(schema.studioVersions.fileId, fileId))
+    .limit(1);
+  if (!v) return;
+  await logEvent({ orgId: v.orgId, projectId: v.projectId, actorLabel: "Tamtree", type, payload: { where: `${v.title} · ${v.label} v${v.number}`, versionId: v.versionId, fileId, ...extra } });
 }
 
 /** The owner's Retry: a failed file goes back to Tamtree with a fresh count. */

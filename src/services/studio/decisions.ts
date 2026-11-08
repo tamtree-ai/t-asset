@@ -48,7 +48,7 @@ export async function decide(share: ShareRow, reviewer: ReviewerRow, raw: Decide
       .returning();
     await tx.update(schema.studioVersions).set({ status }).where(eq(schema.studioVersions.id, data.versionId));
     await logEvent(
-      { orgId: share.orgId, projectId: share.projectId, shareId: share.id, actorLabel: reviewer.name, type: data.decision === "approved" ? "decision.approved" : "decision.changes_requested", payload: { where: whereLabel(found), versionId: data.versionId, decisionId: d!.id, note: data.note ?? null } },
+      { orgId: share.orgId, projectId: share.projectId, shareId: share.id, actorLabel: reviewer.name, type: data.decision === "approved" ? "decision.approved" : "decision.changes_requested", payload: { where: whereLabel(found), versionId: data.versionId, decisionId: d!.id, note: data.note ?? null, reviewerId: reviewer.id } },
       tx,
     );
     return d!;

@@ -15,6 +15,7 @@ import { StudioError } from "@/lib/studio/errors";
 import { minutesLabel, RULES } from "@/lib/studio/limits";
 
 import { hit, peek } from "./studio/access";
+import { logEvent } from "./studio/events";
 
 export const SESSION_DAYS = 30;
 
@@ -40,6 +41,7 @@ export async function signIn(input: { email: string; password: string }, meta: {
   await db.insert(schema.sessions).values({ memberId: member.id, tokenHash: hashToken(token), expiresAt });
   // Old sessions are swept here rather than by a job.
   await db.delete(schema.sessions).where(and(eq(schema.sessions.memberId, member.id), lt(schema.sessions.expiresAt, new Date())));
+  await logEvent({ orgId: member.orgId, actorLabel: member.name ?? "The owner", type: "owner.signed_in", payload: { email, ip: meta.ip } });
   return { token, expiresAt };
 }
 

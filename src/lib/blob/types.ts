@@ -19,6 +19,8 @@ export interface BlobStore {
   head(key: string): Promise<BlobHead | null>;
   /** The first `bytes` bytes of `key` (fewer if it is shorter), to check what a file really is. */
   readStart(key: string, bytes: number): Promise<Uint8Array>;
+  /** Stores `bytes` at `key` from the server itself (a text document; no signed round trip). Overwrites. */
+  put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   /** Removes the keys; fine if some are already gone. */
   delete(keys: string[]): Promise<void>;
 }

@@ -66,7 +66,7 @@ export const studioProjectStatus = pgEnum("studio_project_status", ["active", "p
 export const studioAssetKind = pgEnum("studio_asset_kind", ["image", "video", "document"]);
 export const studioVersionStatus = pgEnum("studio_version_status", ["in_review", "changes_requested", "approved"]);
 /** Notes on a version from whatever made it. A short cut by the shorts pipeline sets all of these. */
-export type VersionMeta = { source?: "upload" | "shorts"; why?: string; hook?: string; closing?: string; durationS?: number; shortId?: string };
+export type VersionMeta = { source?: "upload" | "shorts" | "api"; why?: string; hook?: string; closing?: string; durationS?: number; shortId?: string };
 /** `uploading`: the browser is still sending the original. `pending`: Tamtree is making the renditions. */
 export const studioProcessing = pgEnum("studio_processing", ["uploading", "pending", "ready", "failed"]);
 export const studioDownloadPolicy = pgEnum("studio_download_policy", ["none", "after_approval", "always", "after_payment"]);
@@ -189,9 +189,15 @@ export const studioAssets = pgTable(
     kind: studioAssetKind("kind").notNull(),
     sort: integer("sort").notNull().default(0),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
+    /**
+     * The producer's own name for it (Review API, planning/2026-11-08-review-loop §2.2), e.g.
+     * `tamshoot:project/8f2c…/script`. Unique per project here; the service also refuses one that
+     * another project of the same studio already holds.
+     */
+    externalRef: text("external_ref"),
     createdAt: createdAt(),
   },
-  (t) => [index("studio_assets_project").on(t.projectId)],
+  (t) => [index("studio_assets_project").on(t.projectId), uniqueIndex("studio_assets_project_external_ref").on(t.projectId, t.externalRef).where(sql`${t.externalRef} is not null`)],
 );
 
 /** A parallel design direction ("Option A"). Every asset has at least "Main". */
@@ -227,8 +233,16 @@ export const studioVersions = pgTable(
     releasedAt: timestamp("released_at", { withTimezone: true }).defaultNow(),
     /** What made it and why, for the reviewer. */
     meta: jsonb("meta").$type<VersionMeta>().notNull().default({}),
+    /** The producer's name for this version (Review API); creating it again returns this row. */
+    externalRef: text("external_ref"),
+    /** The version this one was made from (a render's script), in the same project (§5 of the review-loop design). */
+    builtFromVersionId: uuid("built_from_version_id").references((): AnyPgColumn => studioVersions.id, { onDelete: "set null" }),
   },
-  (t) => [uniqueIndex("studio_versions_variation_number").on(t.variationId, t.number)],
+  (t) => [
+    uniqueIndex("studio_versions_variation_number").on(t.variationId, t.number),
+    uniqueIndex("studio_versions_variation_external_ref").on(t.variationId, t.externalRef).where(sql`${t.externalRef} is not null`),
+    index("studio_versions_built_from").on(t.builtFromVersionId),
+  ],
 );
 
 /**
@@ -395,6 +409,28 @@ export const studioEvents = pgTable(
   },
   (t) => [index("studio_events_project").on(t.projectId, t.createdAt), index("studio_events_share").on(t.shareId, t.createdAt)],
 );
+
+/**
+ * Review API bearer tokens (`tt_live_…`), for producers such as tamshoot. Only the hash is kept;
+ * the token is shown once. Every API query is scoped to the token's org.
+ */
+export const studioApiTokens = pgTable(
+  "studio_api_tokens",
+  {
+    id: id(),
+    orgId: uuid("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    /** The last 4 characters, so the owner can tell tokens apart. */
+    tokenHint: text("token_hint").notNull(),
+    scopes: text("scopes").array().$type<ApiScope[]>().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("studio_api_tokens_org").on(t.orgId)],
+);
+export type ApiScope = "review:read" | "review:write";
 
 /** Fixed-window counters for the gate, sign-in, comment posting and identity creation. */
 export const studioRateLimits = pgTable(

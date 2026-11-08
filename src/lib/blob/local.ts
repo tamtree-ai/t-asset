@@ -92,6 +92,10 @@ export class LocalBlobStore implements BlobStore {
     return new Uint8Array(Buffer.concat(chunks));
   }
 
+  async put(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+    await this.write(key, Readable.from([Buffer.from(bytes)]), contentType);
+  }
+
   async delete(keys: string[]): Promise<void> {
     for (const key of keys) {
       const file = this.localPath(key);

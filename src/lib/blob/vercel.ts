@@ -4,7 +4,7 @@
  * `uploadPresigned` (multipart for big videos) against `/api/uploads/sign`; Tamtree gets a plain
  * PUT request from `uploadTarget`.
  */
-import { BlobNotFoundError, del, head, type IssuedSignedToken, issueSignedToken, parseStoreIdFromDelegationToken, presignUrl } from "@vercel/blob";
+import { BlobNotFoundError, del, head, put, type IssuedSignedToken, issueSignedToken, parseStoreIdFromDelegationToken, presignUrl } from "@vercel/blob";
 
 import type { BlobHead, BlobStore, UploadTarget } from "./types";
 
@@ -72,6 +72,10 @@ export class VercelBlobStore implements BlobStore {
     const res = await fetch(await this.readUrl(key, { validForS: 60 }), { headers: { range: `bytes=0-${Math.max(bytes - 1, 0)}` } });
     if (!res.ok) throw new Error(`Reading the start of ${key} failed (${res.status}).`);
     return new Uint8Array(await res.arrayBuffer()).slice(0, bytes);
+  }
+
+  async put(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+    await put(key, Buffer.from(bytes), { access: "private", contentType, addRandomSuffix: false, allowOverwrite: true });
   }
 
   async delete(keys: string[]): Promise<void> {

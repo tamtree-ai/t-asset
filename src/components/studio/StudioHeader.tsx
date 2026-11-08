@@ -48,6 +48,11 @@ export async function StudioHeader({ trail, trailing }: { trail: Crumb[]; traili
               API tokens
             </Link>
           )}
+          {member.role === "owner" && (
+            <Link href="/settings/hooks" className="rounded-md px-2 py-1 text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
+              Hooks
+            </Link>
+          )}
           <form action={signOutAction}>
             <button type="submit" className="rounded-md px-2 py-1 text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
               Sign out
